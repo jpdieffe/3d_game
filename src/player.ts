@@ -9,6 +9,7 @@ import {
   Mesh,
   SceneLoader,
   TransformNode,
+  AbstractMesh,
 } from '@babylonjs/core'
 import type { BuildingDef, PlayerState, CharacterClass } from './types'
 import { AttackSystem } from './attacks'
@@ -32,7 +33,6 @@ const CHAR_MODEL: Record<CharacterClass, [string, string]> = {
 }
 
 // Uniform scale applied to each loaded model.
-// Adjust these if a model comes out too large or tiny.
 const CHAR_SCALE: Record<CharacterClass, number> = {
   warrior: 1.0,
   wizard:  1.0,
@@ -40,14 +40,16 @@ const CHAR_SCALE: Record<CharacterClass, number> = {
   archer:  1.0,
 }
 
-// Vertical offset so the model's feet sit at the root's Y=0.
-// GLB __root__ nodes already carry geometry at the correct position, so offset is 0.
-// Adjust per-character here if a specific model floats or sinks.
-const CHAR_Y_OFFSET: Record<CharacterClass, number> = {
-  warrior: 0,
-  wizard:  0,
-  rogue:   0,
-  archer:  0,
+/** Measure the world-space Y of the lowest vertex in a mesh list. */
+function meshBottomY(meshes: AbstractMesh[]): number {
+  let minY = Infinity
+  for (const m of meshes) {
+    m.computeWorldMatrix(true)
+    const info = m.getBoundingInfo()
+    const worldMin = info.boundingBox.minimumWorld.y
+    if (worldMin < minY) minY = worldMin
+  }
+  return minY === Infinity ? 0 : minY
 }
 
 const ALL_CLASSES: CharacterClass[] = ['warrior', 'wizard', 'rogue', 'archer']
@@ -68,6 +70,7 @@ export class Player {
   onGround = false
 
   private charRoot: TransformNode | null = null
+  private charYOffset = 0              // auto-measured feet offset
   private facingY = 0                   // last movement-facing rotation
 
   private readonly keys: Record<string, boolean> = {}
@@ -164,6 +167,16 @@ export class Player {
 
       root.scaling.setAll(CHAR_SCALE[cls])
       root.rotation.y = this.facingY
+      // Position temporarily at origin so bounding box is in world space
+      root.position.setAll(0)
+
+      // Force world matrices so getBoundingInfo() is accurate
+      this.scene.incrementRenderId()
+      result.meshes.forEach(m => m.computeWorldMatrix(true))
+
+      // Measure how far below Y=0 the model's lowest point sits
+      const bottomY = meshBottomY(result.meshes)
+      this.charYOffset = -bottomY   // lift by this amount each frame
 
       this.charRoot = root
       this.mesh.isVisible = false   // hide capsule now that model is ready
@@ -229,11 +242,11 @@ export class Player {
       this.mesh.rotation.y = this.facingY
     }
 
-    // Sync loaded character model to feet position (+ Y offset to lift from centre-origin)
+    // Sync loaded character model to feet position (Y offset auto-measured from bounding box)
     if (this.charRoot) {
       this.charRoot.position.set(
         this.position.x,
-        this.position.y + CHAR_Y_OFFSET[this.currentClass],
+        this.position.y + this.charYOffset,
         this.position.z,
       )
       this.charRoot.rotation.y = this.facingY
