@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@babylonjs/core": "^8.55.3",
+    "@babylonjs/loaders": "^8.55.3",
     "peerjs": "^1.5.5"
   },
   "devDependencies": {

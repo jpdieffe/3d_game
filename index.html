@@ -160,6 +160,18 @@
       pointer-events: none;
       z-index: 30;
     }
+    /* ── Character label (top-left) ── */
+    #charLabel {
+      position: fixed;
+      top: 0.8rem;
+      left: 0.9rem;
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      pointer-events: none;
+      z-index: 30;
+      opacity: 0.85;
+    }
   </style>
 </head>
 <body>
@@ -191,9 +203,12 @@
   <!-- Connected badge -->
   <div id="connBadge">● Connected</div>
 
+  <!-- Character class indicator -->
+  <div id="charLabel"></div>
+
   <!-- Controls hint -->
   <div id="hud">
-    WASD / Arrows &nbsp;·&nbsp; Space / E to jump &nbsp;·&nbsp; Click to capture mouse &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Esc to release
+    WASD / Arrows &nbsp;·&nbsp; Space / E to jump &nbsp;·&nbsp; Click to capture mouse &nbsp;·&nbsp; Click to attack &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; ` for characters &nbsp;·&nbsp; Esc to release
   </div>
 
   <script type="module" src="/src/main.ts"></script>

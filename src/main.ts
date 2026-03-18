@@ -3,6 +3,7 @@ import { World } from './world'
 import { Player } from './player'
 import { RemotePlayer } from './remote'
 import { Network } from './network'
+import { DebugPanel } from './debug'
 
 // ── Engine & Scene ──────────────────────────────────────────────────────────
 const canvas  = document.getElementById('renderCanvas') as HTMLCanvasElement
@@ -14,6 +15,13 @@ const world   = new World(scene)
 const player  = new Player(scene, world.buildings)
 const remote  = new RemotePlayer(scene)
 const network = new Network()
+const debug   = new DebugPanel(canvas)
+
+// Wire character selection to the player
+debug.onCharacterChange = cls => {
+  player.loadCharacter(cls)
+  debug.setCharacter(cls)
+}
 
 // ── Lobby UI ────────────────────────────────────────────────────────────────
 const lobbyEl     = document.getElementById('lobby')!

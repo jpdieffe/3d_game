@@ -17,3 +17,6 @@ export interface PlayerState {
 
 /** Network message envelope */
 export type NetMessage = { type: 'state'; state: PlayerState }
+
+/** Playable character classes */
+export type CharacterClass = 'warrior' | 'wizard' | 'rogue' | 'archer'

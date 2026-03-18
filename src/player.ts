@@ -1,3 +1,4 @@
+import '@babylonjs/loaders/glTF'
 import {
   Scene,
   MeshBuilder,
@@ -6,8 +7,11 @@ import {
   Vector3,
   ArcRotateCamera,
   Mesh,
+  SceneLoader,
+  TransformNode,
 } from '@babylonjs/core'
-import type { BuildingDef, PlayerState } from './types'
+import type { BuildingDef, PlayerState, CharacterClass } from './types'
+import { AttackSystem } from './attacks'
 
 const GRAVITY        = -28    // m/s²
 const JUMP_VELOCITY  =  39    // m/s upward on jump
@@ -19,19 +23,44 @@ const RESPAWN_Y      = -12    // fall off world → respawn
 
 const SPAWN = new Vector3(0, 0, -8)
 
-export class Player {
-  readonly mesh: Mesh
-  readonly camera: ArcRotateCamera
+// GLB file per character class — paths relative to the page (public/ folder)
+const CHAR_MODEL: Record<CharacterClass, [string, string]> = {
+  warrior: ['./assets/chars/', 'knight.glb'],
+  wizard:  ['./assets/chars/', 'wizard.glb'],
+  rogue:   ['./assets/chars/', 'rogue.glb'],
+  archer:  ['./assets/chars/', 'archer.glb'],
+}
 
-  // Physics state — position is the FEET position
+// Uniform scale applied to each loaded model.
+// Adjust these if a model comes out too large or tiny.
+const CHAR_SCALE: Record<CharacterClass, number> = {
+  warrior: 1.0,
+  wizard:  1.0,
+  rogue:   1.0,
+  archer:  1.0,
+}
+
+export class Player {
+  readonly mesh: Mesh                   // capsule — physics placeholder (hidden once GLB loads)
+  readonly camera: ArcRotateCamera
+  readonly attackSystem = new AttackSystem()
+
+  currentClass: CharacterClass = 'warrior'
+
+  // Physics state — position tracks the FEET
   readonly position = new Vector3(SPAWN.x, SPAWN.y, SPAWN.z)
   readonly velocity = new Vector3(0, 0, 0)
   onGround = false
 
+  private charRoot: TransformNode | null = null
+  private facingY = 0                   // last movement-facing rotation
+
   private readonly keys: Record<string, boolean> = {}
   private readonly buildings: BuildingDef[]
+  private readonly scene: Scene
 
   constructor(scene: Scene, buildings: BuildingDef[]) {
+    this.scene     = scene
     this.buildings = buildings
 
     // Visual mesh (capsule centred at feet + PLAYER_HEIGHT/2)
@@ -60,9 +89,18 @@ export class Player {
     const MIN_BETA = 0.15
     const MAX_BETA = Math.PI / 2.05
 
-    // Click the game canvas to capture the mouse
-    canvas.addEventListener('click', () => {
-      if (document.pointerLockElement !== canvas) {
+    // Left-click: lock pointer (if not locked) OR attack (if locked)
+    canvas.addEventListener('mousedown', e => {
+      if (e.button !== 0) return
+      if (document.pointerLockElement === canvas) {
+        this.attackSystem.attack(
+          scene,
+          this.currentClass,
+          this.position,
+          this.camera.alpha,
+          this.camera.beta,
+        )
+      } else {
         canvas.requestPointerLock()
       }
     })
@@ -83,6 +121,38 @@ export class Player {
 
     window.addEventListener('keydown', e => { this.keys[e.code] = true })
     window.addEventListener('keyup',   e => { this.keys[e.code] = false })
+  }
+
+  // ── Character model loading ───────────────────────────────────────────────
+
+  async loadCharacter(cls: CharacterClass) {
+    this.currentClass = cls
+
+    // Dispose previous GLB
+    if (this.charRoot) {
+      this.charRoot.getChildMeshes().forEach(m => m.dispose())
+      this.charRoot.dispose()
+      this.charRoot = null
+      this.mesh.isVisible = true   // show capsule while new model loads
+    }
+
+    const [rootUrl, filename] = CHAR_MODEL[cls]
+    try {
+      const result = await SceneLoader.ImportMeshAsync('', rootUrl, filename, this.scene)
+
+      // Parent all loaded meshes under a single TransformNode we control
+      const root = new TransformNode(`charRoot_${cls}`, this.scene)
+      result.meshes.forEach(m => { if (!m.parent) m.parent = root })
+
+      root.scaling.setAll(CHAR_SCALE[cls])
+      root.rotation.y = this.facingY
+
+      this.charRoot = root
+      this.mesh.isVisible = false   // hide capsule now that model is ready
+    } catch (err) {
+      console.error('[Player] Failed to load character model', cls, err)
+      // Capsule stays visible on error
+    }
   }
 
   update(dt: number) {
@@ -129,7 +199,7 @@ export class Player {
     this.onGround = false
     this.resolveCollisions()
 
-    // Sync mesh — mesh is centred at feet + half height
+    // Sync capsule mesh — centre at feet + half height
     this.mesh.position.set(
       this.position.x,
       this.position.y + PLAYER_HEIGHT / 2,
@@ -137,11 +207,21 @@ export class Player {
     )
     // Face movement direction when moving
     if (len > 0) {
-      this.mesh.rotation.y = Math.atan2(mx, mz)
+      this.facingY         = Math.atan2(mx, mz)
+      this.mesh.rotation.y = this.facingY
     }
 
-    // Camera tracks the mesh
+    // Sync loaded character model to feet position
+    if (this.charRoot) {
+      this.charRoot.position.set(this.position.x, this.position.y, this.position.z)
+      this.charRoot.rotation.y = this.facingY
+    }
+
+    // Camera tracks the mesh centre
     this.camera.target.copyFrom(this.mesh.position)
+
+    // Tick attack effects
+    this.attackSystem.update(dt)
   }
 
   private resolveCollisions() {
