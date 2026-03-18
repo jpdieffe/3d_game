@@ -43,22 +43,43 @@ export class Player {
     mat.diffuseColor = new Color3(0.2, 0.55, 1.0)
     this.mesh.material = mat
 
-    // Arc-rotate camera — orbits around the player, mouse-controlled
+    // Arc-rotate camera — free mouse-look via pointer lock
     this.camera = new ArcRotateCamera(
       'cam',
       -Math.PI / 2,   // alpha: camera behind player on -Z side
-      Math.PI / 3.5,  // beta: 51° down from zenith
+      Math.PI / 3.5,  // beta: ~51° down from zenith
       14,             // radius
       Vector3.Zero(),
       scene,
     )
-    this.camera.lowerRadiusLimit  =  4
-    this.camera.upperRadiusLimit  = 28
-    this.camera.upperBetaLimit    = Math.PI / 2.05
-    this.camera.panningSensibility = 0  // disable pan; rotation only
-    // Remove the default keyboard inputs so our WASD handler takes priority
-    this.camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput')
-    this.camera.attachControl(scene.getEngine().getRenderingCanvas()!, true)
+    // Manage camera manually — no built-in drag/keyboard controls
+    this.camera.inputs.clear()
+
+    const canvas = scene.getEngine().getRenderingCanvas()!
+    const SENSITIVITY = 0.0025
+    const MIN_BETA = 0.15
+    const MAX_BETA = Math.PI / 2.05
+
+    // Click the game canvas to capture the mouse
+    canvas.addEventListener('click', () => {
+      if (document.pointerLockElement !== canvas) {
+        canvas.requestPointerLock()
+      }
+    })
+
+    // Free mouse-look while pointer is locked
+    window.addEventListener('mousemove', e => {
+      if (document.pointerLockElement !== canvas) return
+      this.camera.alpha += e.movementX * SENSITIVITY
+      this.camera.beta  = Math.max(MIN_BETA, Math.min(MAX_BETA,
+        this.camera.beta + e.movementY * SENSITIVITY))
+    })
+
+    // Scroll wheel to zoom
+    canvas.addEventListener('wheel', e => {
+      this.camera.radius = Math.max(4, Math.min(28,
+        this.camera.radius + e.deltaY * 0.02))
+    }, { passive: true })
 
     window.addEventListener('keydown', e => { this.keys[e.code] = true })
     window.addEventListener('keyup',   e => { this.keys[e.code] = false })
