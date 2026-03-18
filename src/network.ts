@@ -19,34 +19,80 @@ export class Network {
   /** Called when a P2P connection is fully established */
   onPeerConnected: (() => void) | null = null
 
+  /** Called when any error occurs (e.g. signaling server unreachable) */
+  onError: ((msg: string) => void) | null = null
+
   // ── Host side ─────────────────────────────────────────────────────────────
 
   host(onReady: (roomId: string) => void) {
-    this.peer = new Peer()
+    this.destroy()
+    this.peer = new Peer(undefined, {
+      // Explicitly target PeerJS cloud so the config is clear
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      debug: 1,
+    })
+
+    const timeout = setTimeout(() => {
+      if (!this.peer) return
+      this.onError?.('Could not reach PeerJS server. Check your internet connection and try again.')
+    }, 12000)
+
     this.peer.on('open', id => {
+      clearTimeout(timeout)
       onReady(id)
     })
     this.peer.on('connection', conn => {
       this.conn = conn
       this.wireConn(conn)
     })
-    this.peer.on('error', err => console.error('[Network] host error', err))
+    this.peer.on('error', err => {
+      clearTimeout(timeout)
+      console.error('[Network] host error', err)
+      this.onError?.(`Connection error: ${(err as Error).message ?? err}`)
+    })
   }
 
   // ── Join side ──────────────────────────────────────────────────────────────
 
   join(roomId: string, onConnected: () => void) {
-    this.peer = new Peer()
+    this.destroy()
+    this.peer = new Peer(undefined, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      debug: 1,
+    })
+
+    const timeout = setTimeout(() => {
+      if (!this.peer) return
+      this.onError?.('Could not reach PeerJS server. Check your internet connection and try again.')
+    }, 12000)
+
     this.peer.on('open', () => {
-      const conn = this.peer!.connect(roomId)
+      clearTimeout(timeout)
+      const conn = this.peer!.connect(roomId, { reliable: true })
       this.conn = conn
       this.wireConn(conn)
+
+      const connTimeout = setTimeout(() => {
+        this.onError?.('Could not connect to that room code. Make sure the host is waiting and the code is correct.')
+      }, 15000)
+
       conn.on('open', () => {
+        clearTimeout(connTimeout)
         onConnected()
         this.onPeerConnected?.()
       })
     })
-    this.peer.on('error', err => console.error('[Network] join error', err))
+    this.peer.on('error', err => {
+      clearTimeout(timeout)
+      console.error('[Network] join error', err)
+      this.onError?.(`Connection error: ${(err as Error).message ?? err}`)
+    })
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

@@ -34,9 +34,17 @@ function closeLobby() {
   lobbyEl.style.display = 'none'
 }
 
+function networkError(msg: string) {
+  setStatus(`⚠ ${msg}`)
+  statusEl.style.color = '#ff6b6b'
+}
+
 // Host button
 document.getElementById('hostBtn')!.addEventListener('click', () => {
-  setStatus('Creating room…')
+  statusEl.style.color = ''
+  setStatus('Connecting to signaling server…')
+  roomCodeEl.textContent = '…'
+  network.onError = networkError
   network.onPeerConnected = () => {
     setStatus('Friend connected!')
     showConnected()
@@ -52,7 +60,9 @@ document.getElementById('hostBtn')!.addEventListener('click', () => {
 document.getElementById('joinBtn')!.addEventListener('click', () => {
   const code = roomInput.value.trim()
   if (!code) { setStatus('Paste a room code first.'); return }
+  statusEl.style.color = ''
   setStatus('Connecting…')
+  network.onError = networkError
   network.onPeerConnected = () => {
     setStatus('Connected!')
     showConnected()
