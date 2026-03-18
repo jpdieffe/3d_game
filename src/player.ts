@@ -10,7 +10,7 @@ import {
 import type { BuildingDef, PlayerState } from './types'
 
 const GRAVITY        = -28    // m/s²
-const JUMP_VELOCITY  =  13    // m/s upward on jump
+const JUMP_VELOCITY  =  39    // m/s upward on jump
 const MOVE_SPEED     =   8    // m/s horizontal
 const PLAYER_HEIGHT  =   1.8  // metres (feet → top)
 const PLAYER_RADIUS  =   0.4  // metres horizontal extent
