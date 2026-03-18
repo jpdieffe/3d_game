@@ -17,6 +17,9 @@ const remote  = new RemotePlayer(scene)
 const network = new Network()
 const debug   = new DebugPanel(canvas)
 
+// Reflect the randomly-chosen starting character in the debug panel
+debug.setCharacter(player.currentClass)
+
 // Wire character selection to the player
 debug.onCharacterChange = cls => {
   player.loadCharacter(cls)

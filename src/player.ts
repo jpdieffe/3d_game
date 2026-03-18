@@ -40,12 +40,26 @@ const CHAR_SCALE: Record<CharacterClass, number> = {
   archer:  1.0,
 }
 
+// Vertical offset so the model's feet sit at the root's Y=0.
+// GLB model origins are often at the mesh centre, so offset by ~half model height.
+const CHAR_Y_OFFSET: Record<CharacterClass, number> = {
+  warrior: 0.9,
+  wizard:  0.9,
+  rogue:   0.9,
+  archer:  0.9,
+}
+
+const ALL_CLASSES: CharacterClass[] = ['warrior', 'wizard', 'rogue', 'archer']
+function randomClass(): CharacterClass {
+  return ALL_CLASSES[Math.floor(Math.random() * ALL_CLASSES.length)]
+}
+
 export class Player {
   readonly mesh: Mesh                   // capsule — physics placeholder (hidden once GLB loads)
   readonly camera: ArcRotateCamera
   readonly attackSystem = new AttackSystem()
 
-  currentClass: CharacterClass = 'warrior'
+  currentClass: CharacterClass = randomClass()
 
   // Physics state — position tracks the FEET
   readonly position = new Vector3(SPAWN.x, SPAWN.y, SPAWN.z)
@@ -121,6 +135,9 @@ export class Player {
 
     window.addEventListener('keydown', e => { this.keys[e.code] = true })
     window.addEventListener('keyup',   e => { this.keys[e.code] = false })
+
+    // Auto-load random starting character
+    this.loadCharacter(this.currentClass)
   }
 
   // ── Character model loading ───────────────────────────────────────────────
@@ -211,9 +228,13 @@ export class Player {
       this.mesh.rotation.y = this.facingY
     }
 
-    // Sync loaded character model to feet position
+    // Sync loaded character model to feet position (+ Y offset to lift from centre-origin)
     if (this.charRoot) {
-      this.charRoot.position.set(this.position.x, this.position.y, this.position.z)
+      this.charRoot.position.set(
+        this.position.x,
+        this.position.y + CHAR_Y_OFFSET[this.currentClass],
+        this.position.z,
+      )
       this.charRoot.rotation.y = this.facingY
     }
 

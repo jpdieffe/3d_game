@@ -1,1 +1,0 @@
-import"./shaderStore-1xgJNigV.js";import"./sceneUboDeclaration-BT9_z327.js";import"./clusteredLightingFunctions-B9mcGcdn.js";import{Zn as e}from"./index-w1JqqebH.js";export{e as lightProxyVertexShaderWGSL};
