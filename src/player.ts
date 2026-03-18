@@ -70,9 +70,9 @@ export class Player {
     // Free mouse-look while pointer is locked
     window.addEventListener('mousemove', e => {
       if (document.pointerLockElement !== canvas) return
-      this.camera.alpha += e.movementX * SENSITIVITY
+      this.camera.alpha -= e.movementX * SENSITIVITY
       this.camera.beta  = Math.max(MIN_BETA, Math.min(MAX_BETA,
-        this.camera.beta + e.movementY * SENSITIVITY))
+        this.camera.beta - e.movementY * SENSITIVITY))
     })
 
     // Scroll wheel to zoom
