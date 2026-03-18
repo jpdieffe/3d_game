@@ -152,6 +152,9 @@ export class Player {
       if (e.button !== 0) return
       const lobby = document.getElementById('lobby') as HTMLElement | null
       if (lobby?.style.display !== 'none') return
+      // Don't steal focus from the debug/character-select panel
+      const debugPanel = document.getElementById('debugPanel') as HTMLElement | null
+      if (debugPanel?.style.display !== 'none') return
       if (document.pointerLockElement !== canvas) canvas.requestPointerLock()
     })
 
