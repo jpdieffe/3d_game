@@ -41,12 +41,13 @@ const CHAR_SCALE: Record<CharacterClass, number> = {
 }
 
 // Vertical offset so the model's feet sit at the root's Y=0.
-// GLB model origins are often at the mesh centre, so offset by ~half model height.
+// GLB __root__ nodes already carry geometry at the correct position, so offset is 0.
+// Adjust per-character here if a specific model floats or sinks.
 const CHAR_Y_OFFSET: Record<CharacterClass, number> = {
-  warrior: 0.9,
-  wizard:  0.9,
-  rogue:   0.9,
-  archer:  0.9,
+  warrior: 0,
+  wizard:  0,
+  rogue:   0,
+  archer:  0,
 }
 
 const ALL_CLASSES: CharacterClass[] = ['warrior', 'wizard', 'rogue', 'archer']

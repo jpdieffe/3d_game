@@ -43,6 +43,8 @@ function showConnected() {
 
 function closeLobby() {
   lobbyEl.style.display = 'none'
+  // Auto-capture mouse so player can look around immediately
+  canvas.requestPointerLock()
 }
 
 function networkError(msg: string) {
