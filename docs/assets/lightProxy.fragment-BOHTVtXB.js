@@ -1,0 +1,1 @@
+import"./shaderStore-EocWwLxt.js";import{Yn as e}from"./index-DAD9naBe.js";export{e as lightProxyPixelShaderWGSL};

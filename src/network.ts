@@ -2,6 +2,20 @@ import Peer from 'peerjs'
 import type { DataConnection } from 'peerjs'
 import type { NetMessage, PlayerState } from './types'
 
+const FRUITS = [
+  'apple','apricot','avocado','banana','berry','cherry','clementine',
+  'coconut','fig','grape','guava','kiwi','lemon','lime','lychee',
+  'mango','melon','nectarine','olive','orange','papaya','peach',
+  'pear','pineapple','plum','pomelo','quince','raspberry','starfruit',
+  'strawberry','tangerine','watermelon',
+]
+
+function fruitId(): string {
+  const fruit = FRUITS[Math.floor(Math.random() * FRUITS.length)]
+  const num   = Math.floor(Math.random() * 90) + 10   // 10–99
+  return `${fruit}-${num}`
+}
+
 /**
  * Thin wrapper around PeerJS.
  *
@@ -26,7 +40,7 @@ export class Network {
 
   host(onReady: (roomId: string) => void) {
     this.destroy()
-    this.peer = new Peer(undefined, {
+    this.peer = new Peer(fruitId(), {
       // Explicitly target PeerJS cloud so the config is clear
       host: '0.peerjs.com',
       port: 443,

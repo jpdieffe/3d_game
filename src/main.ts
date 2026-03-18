@@ -46,13 +46,13 @@ document.getElementById('hostBtn')!.addEventListener('click', () => {
   roomCodeEl.textContent = '…'
   network.onError = networkError
   network.onPeerConnected = () => {
-    setStatus('Friend connected!')
     showConnected()
-    setTimeout(closeLobby, 700)
   }
   network.host(id => {
+    // Show the code briefly, then drop into the game — friend can join anytime
     roomCodeEl.textContent = id
-    setStatus('Share the code above with your friend, then wait…')
+    setStatus('Playing solo — friend can join with the code above')
+    setTimeout(closeLobby, 2500)
   })
 })
 
