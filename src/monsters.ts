@@ -264,7 +264,7 @@ class Monster {
         playerPos.x - this.position.x,
         playerPos.z - this.position.z,
       ) - Math.PI
-      const swing = new SwordSwing(this.scene, this.position, alpha, 0.9, 0.5)
+      const swing = new SwordSwing(this.scene, this.position, alpha, 0.9, 0.25)
       swing.onHitCheck = (pos, range) => {
         const d = Vector3.Distance(pos, playerPos)
         if (d > range + 0.6) return
