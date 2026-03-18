@@ -1,1 +1,0 @@
-import"./shaderStore-1xgJNigV.js";import{Qn as e}from"./index-CqBQSlmr.js";export{e as lightProxyPixelShaderWGSL};

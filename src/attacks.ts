@@ -7,23 +7,9 @@ import {
   Vector3,
   Mesh,
   TransformNode,
-  SceneLoader,
 } from '@babylonjs/core'
 import type { CharacterClass } from './types'
 
-// â”€â”€ Module-level sword template (loaded once, shared by all swings) â”€â”€â”€â”€â”€â”€â”€â”€â”€
-let swordRoot: TransformNode | null = null
-
-export async function preloadSword(scene: Scene): Promise<void> {
-  if (swordRoot) return
-  try {
-    const result = await SceneLoader.ImportMeshAsync('', './assets/weapons/', 'sword.glb', scene)
-    result.meshes.forEach(m => { m.isVisible = false; m.setEnabled(false) })
-    swordRoot = result.meshes[0] as unknown as TransformNode
-  } catch (e) {
-    console.warn('[attacks] sword.glb not loaded â€“ using geometry fallback', e)
-  }
-}
 
 // â”€â”€ Self-managing explosion visual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function spawnExplosion(scene: Scene, pos: Vector3, maxRadius: number): void {
@@ -63,16 +49,16 @@ interface Effect {
 }
 
 
-//  Sword Swing 
-// Spawns a sword in front of the player, sweeps it downward in an arc.
-// Uses sword.glb when loaded; falls back to a simple blade box.
+// ── Sword Swing ──────────────────────────────────────────────────────────────
+// Tracks the player every frame (live Vector3 reference) and sweeps the blade
+// from the player's right to left — a natural horizontal slash.
 export class SwordSwing implements Effect {
   private readonly pivot: TransformNode
-  private swordClone: TransformNode | null = null
-  private fallback: Mesh | null = null
+  private readonly blades: Mesh[] = []
   private elapsed = 0
   private hitFired = false
 
+  // hitPos is updated every frame to follow the wielder
   readonly hitPos: Vector3
   readonly hitRange: number
 
@@ -81,58 +67,89 @@ export class SwordSwing implements Effect {
 
   constructor(
     scene: Scene,
-    feetPos: Vector3,
-    alpha: number,
+    // Pass the LIVE Vector3 reference (player.position / monster.position) —
+    // do NOT pass a clone, so the sword tracks movement automatically.
+    private readonly posRef: Vector3,
+    private readonly alpha: number,
     readonly swingScale: number,   // 1.0 warrior, 0.65 rogue
     private readonly duration: number,
   ) {
+    const sw = swingScale
+    this.hitRange = 2.0 * sw
+
     const fwdX = -Math.cos(alpha)
     const fwdZ = -Math.sin(alpha)
-
-    this.hitRange = 2.2 * swingScale
-    this.hitPos   = new Vector3(
-      feetPos.x + fwdX * this.hitRange * 0.6,
-      feetPos.y + 1.1,
-      feetPos.z + fwdZ * this.hitRange * 0.6,
+    this.hitPos = new Vector3(
+      posRef.x + fwdX * this.hitRange * 0.5,
+      posRef.y + 1.1,
+      posRef.z + fwdZ * this.hitRange * 0.5,
     )
 
     this.pivot = new TransformNode('swingPivot', scene)
-    this.pivot.position.copyFrom(this.hitPos)
+    // Pivot at player chest; rotation.y faces the player's forward direction
+    this.pivot.position.set(posRef.x, posRef.y + 1.1, posRef.z)
     this.pivot.rotation.y = alpha
-    this.pivot.rotation.x = -1.1   // sword starts raised
+    this.pivot.rotation.z = -0.9    // sword starts on player's right
+    this.pivot.rotation.x =  0.18   // slight forward lean
 
-    if (swordRoot) {
-      const clone = swordRoot.clone('swordSwing', this.pivot, false)
-      if (clone) {
-        clone.setEnabled(true)
-        clone.scaling.setAll(swingScale)
-        clone.getChildMeshes(false).forEach(m => { m.setEnabled(true); m.isVisible = true })
-        this.swordClone = clone
-      }
-    }
+    // ── Blade (silvery box extending upward from pivot) ───────────────────
+    const blade = MeshBuilder.CreateBox('blade', {
+      width:  0.065 * sw,
+      height: 1.55  * sw,
+      depth:  0.022,
+    }, scene)
+    blade.parent   = this.pivot
+    blade.position.y = 0.8 * sw
+    const bladeM = new StandardMaterial('bladeM_' + Math.random(), scene)
+    bladeM.diffuseColor  = new Color3(0.85, 0.90, 1.00)
+    bladeM.emissiveColor = new Color3(0.20, 0.30, 0.60)
+    bladeM.alpha = 0.95
+    blade.material = bladeM
+    this.blades.push(blade)
 
-    // Fallback blade box (always shown when GLB not ready yet)
-    if (!this.swordClone) {
-      const blade = MeshBuilder.CreateBox('swordBlade', {
-        width:  0.08 * swingScale,
-        height: 1.4  * swingScale,
-        depth:  0.04,
-      }, scene)
-      blade.parent = this.pivot
-      blade.position.set(0, 0.5 * swingScale, 0)
-      const mat = new StandardMaterial('bladeMat_' + Math.random(), scene)
-      mat.diffuseColor  = new Color3(0.80, 0.88, 1.0)
-      mat.emissiveColor = new Color3(0.15, 0.25, 0.5)
-      mat.alpha = 0.92
-      blade.material = mat
-      this.fallback = blade
-    }
+    // ── Cross-guard ───────────────────────────────────────────────────────
+    const guard = MeshBuilder.CreateBox('guard', {
+      width:  0.38 * sw,
+      height: 0.055 * sw,
+      depth:  0.07,
+    }, scene)
+    guard.parent = this.pivot
+    const guardM = new StandardMaterial('guardM_' + Math.random(), scene)
+    guardM.diffuseColor  = new Color3(0.72, 0.55, 0.12)
+    guardM.emissiveColor = new Color3(0.28, 0.18, 0.00)
+    guard.material = guardM
+    this.blades.push(guard)
+
+    // ── Handle ────────────────────────────────────────────────────────────
+    const handle = MeshBuilder.CreateCylinder('handle', {
+      height: 0.30 * sw, diameter: 0.048 * sw, tessellation: 8,
+    }, scene)
+    handle.parent   = this.pivot
+    handle.position.y = -0.17 * sw
+    const handleM = new StandardMaterial('handleM_' + Math.random(), scene)
+    handleM.diffuseColor = new Color3(0.32, 0.16, 0.04)
+    handle.material = handleM
+    this.blades.push(handle)
   }
 
   update(dt: number): boolean {
     this.elapsed += dt
     const t = Math.min(1, this.elapsed / this.duration)
-    this.pivot.rotation.x = -1.1 + 2.1 * t   // sweep from raised to forward-down
+
+    // Track wielder — update pivot position every frame
+    this.pivot.position.set(this.posRef.x, this.posRef.y + 1.1, this.posRef.z)
+
+    // Sweep rotation.z: right (-0.9) → left (+0.9) — horizontal slash
+    this.pivot.rotation.z = -0.9 + 1.8 * t
+
+    // Update hit position to follow wielder
+    const fwdX = -Math.cos(this.alpha)
+    const fwdZ = -Math.sin(this.alpha)
+    this.hitPos.set(
+      this.posRef.x + fwdX * this.hitRange * 0.5,
+      this.posRef.y + 1.1,
+      this.posRef.z + fwdZ * this.hitRange * 0.5,
+    )
 
     if (!this.hitFired && t >= 0.45) {
       this.hitFired = true
@@ -142,9 +159,7 @@ export class SwordSwing implements Effect {
   }
 
   dispose() {
-    this.swordClone?.getChildMeshes(false).forEach(m => m.dispose())
-    this.swordClone?.dispose()
-    this.fallback?.dispose()
+    this.blades.forEach(b => b.dispose())
     this.pivot.dispose()
   }
 }
@@ -249,8 +264,8 @@ export class AttackSystem {
    */
   onHit: ((pos: Vector3, radius: number, damage: number) => boolean) | null = null
 
-  constructor(scene: Scene) {
-    preloadSword(scene)
+  constructor(_scene: Scene) {
+    // sword geometry is now built procedurally in SwordSwing
   }
 
   update(dt: number) {
@@ -319,3 +334,4 @@ export class AttackSystem {
     this.effects.length = 0
   }
 }
+

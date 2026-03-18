@@ -26,6 +26,10 @@ player.attackSystem.onHit = (pos, radius, damage) =>
 // Wire player death → respawn
 player.health.onDeath = () => player.respawn()
 
+// Sync attacks over the network so both players see each other's attack effects
+player.onAttack = (cls, alpha, beta) => network.sendAttack(cls, alpha, beta)
+network.onAttack = (cls, alpha, beta) => remote.triggerAttack(cls, alpha, beta)
+
 // Reflect the randomly-chosen starting character in the debug panel
 debug.setCharacter(player.currentClass)
 

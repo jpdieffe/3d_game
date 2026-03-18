@@ -130,7 +130,7 @@ class Monster {
       const result = await SceneLoader.ImportMeshAsync('', './assets/monsters/', file, this.scene)
       const root = new TransformNode(`mon_${this.type}_root`, this.scene)
       result.meshes.forEach((m: AbstractMesh) => { if (!m.parent) m.parent = root })
-      root.scaling.setAll(1)
+      root.scaling.setAll(2)
       root.position.copyFrom(this.position)
 
       // Auto-measure feet offset (same technique as Player)
@@ -146,7 +146,7 @@ class Monster {
       this.root = root
     } catch {
       // Fallback: coloured box
-      const box = MeshBuilder.CreateBox(`mon_fb_${this.type}`, { size: 1.0 }, this.scene)
+      const box = MeshBuilder.CreateBox(`mon_fb_${this.type}`, { size: 2.0 }, this.scene)
       const mat = new StandardMaterial(`mon_fb_mat_${this.type}`, this.scene)
       mat.diffuseColor = this.def.projColor
       box.material = mat
@@ -299,7 +299,9 @@ class Monster {
       this.def.projColor,
       this.def.projRadius,
       (projPos) => {
-        if (Vector3.Distance(projPos, playerPos) < 0.55 + this.def.projRadius) {
+        // Test against body centre (feet + 0.9) so shots actually land on the player
+        const playerCenter = new Vector3(playerPos.x, playerPos.y + 0.9, playerPos.z)
+        if (Vector3.Distance(projPos, playerCenter) < 0.6 + this.def.projRadius) {
           playerHealth.takeDamage(dmg)
           return true
         }

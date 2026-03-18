@@ -35,10 +35,10 @@ const CHAR_MODEL: Record<CharacterClass, [string, string]> = {
 
 // Uniform scale applied to each loaded model.
 const CHAR_SCALE: Record<CharacterClass, number> = {
-  warrior: 1.0,
-  wizard:  1.0,
-  rogue:   1.0,
-  archer:  1.0,
+  warrior: 2.0,
+  wizard:  2.0,
+  rogue:   2.0,
+  archer:  2.0,
 }
 
 /** Measure the world-space Y of the lowest vertex in a mesh list. */
@@ -65,6 +65,7 @@ export class Player {
   readonly health: HealthSystem
 
   currentClass: CharacterClass = randomClass()
+  onAttack: ((cls: CharacterClass, alpha: number, beta: number) => void) | null = null
 
   // Physics state — position tracks the FEET
   readonly position = new Vector3(SPAWN.x, SPAWN.y, SPAWN.z)
@@ -123,6 +124,7 @@ export class Player {
           this.camera.alpha,
           this.camera.beta,
         )
+        this.onAttack?.(this.currentClass, this.camera.alpha, this.camera.beta)
       } else {
         canvas.requestPointerLock()
       }
@@ -144,6 +146,14 @@ export class Player {
 
     window.addEventListener('keydown', e => { this.keys[e.code] = true })
     window.addEventListener('keyup',   e => { this.keys[e.code] = false })
+
+    // Re-lock pointer after alt-tab: any click in the window while in-game re-acquires
+    window.addEventListener('mousedown', e => {
+      if (e.button !== 0) return
+      const lobby = document.getElementById('lobby') as HTMLElement | null
+      if (lobby?.style.display !== 'none') return
+      if (document.pointerLockElement !== canvas) canvas.requestPointerLock()
+    })
 
     // Auto-load random starting character
     this.loadCharacter(this.currentClass)
@@ -336,10 +346,11 @@ export class Player {
 
   getState(): PlayerState {
     return {
-      x:  this.position.x,
-      y:  this.position.y,
-      z:  this.position.z,
-      ry: this.camera.alpha,
+      x:   this.position.x,
+      y:   this.position.y,
+      z:   this.position.z,
+      ry:  this.camera.alpha,
+      cls: this.currentClass,
     }
   }
 }
