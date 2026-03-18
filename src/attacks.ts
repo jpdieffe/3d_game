@@ -1,3 +1,4 @@
+﻿import '@babylonjs/loaders/glTF'
 import {
   Scene,
   MeshBuilder,
@@ -6,8 +7,47 @@ import {
   Vector3,
   Mesh,
   TransformNode,
+  SceneLoader,
 } from '@babylonjs/core'
 import type { CharacterClass } from './types'
+
+// â”€â”€ Module-level sword template (loaded once, shared by all swings) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let swordRoot: TransformNode | null = null
+
+export async function preloadSword(scene: Scene): Promise<void> {
+  if (swordRoot) return
+  try {
+    const result = await SceneLoader.ImportMeshAsync('', './assets/weapons/', 'sword.glb', scene)
+    result.meshes.forEach(m => { m.isVisible = false; m.setEnabled(false) })
+    swordRoot = result.meshes[0] as unknown as TransformNode
+  } catch (e) {
+    console.warn('[attacks] sword.glb not loaded â€“ using geometry fallback', e)
+  }
+}
+
+// â”€â”€ Self-managing explosion visual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export function spawnExplosion(scene: Scene, pos: Vector3, maxRadius: number): void {
+  const mesh = MeshBuilder.CreateSphere('explosion', { diameter: 0.1, segments: 8 }, scene)
+  mesh.position.copyFrom(pos)
+  const mat = new StandardMaterial('explosionMat_' + Math.random(), scene)
+  mat.diffuseColor    = new Color3(1, 0.55, 0.05)
+  mat.emissiveColor   = new Color3(1, 0.25, 0)
+  mat.backFaceCulling = false
+  mat.alpha = 0.9
+  mesh.material = mat
+  let elapsed = 0
+  const DURATION = 0.55
+  const obs = scene.onBeforeRenderObservable.add(() => {
+    elapsed += scene.getEngine().getDeltaTime() / 1000
+    const t = Math.min(1, elapsed / DURATION)
+    mesh.scaling.setAll(maxRadius * 2 * (t < 0.35 ? t / 0.35 : 1))
+    ;(mesh.material as StandardMaterial).alpha = 0.9 * (1 - t * t)
+    if (elapsed >= DURATION) {
+      mesh.dispose()
+      scene.onBeforeRenderObservable.remove(obs)
+    }
+  })
+}
 
 // Per-class attack cooldowns (seconds)
 const COOLDOWN: Record<CharacterClass, number> = {
@@ -18,143 +58,214 @@ const COOLDOWN: Record<CharacterClass, number> = {
 }
 
 interface Effect {
-  update(dt: number): boolean   // returns true when the effect is finished
+  update(dt: number): boolean   // true = finished
   dispose(): void
 }
 
-// ── Slash effect (warrior / rogue) ─────────────────────────────────────────
-// Three fanned planes that scale up and fade — looks like a sword arc
-class SlashEffect implements Effect {
-  private readonly root: TransformNode
-  private readonly planes: Mesh[] = []
+
+//  Sword Swing 
+// Spawns a sword in front of the player, sweeps it downward in an arc.
+// Uses sword.glb when loaded; falls back to a simple blade box.
+export class SwordSwing implements Effect {
+  private readonly pivot: TransformNode
+  private swordClone: TransformNode | null = null
+  private fallback: Mesh | null = null
   private elapsed = 0
-  private readonly duration: number
+  private hitFired = false
+
+  readonly hitPos: Vector3
+  readonly hitRange: number
+
+  /** Called once at ~45% through the swing: (worldPos, rangeMetres) */
+  onHitCheck: ((pos: Vector3, range: number) => void) | null = null
 
   constructor(
     scene: Scene,
-    position: Vector3,
-    facingAlpha: number,
-    size: number,
-    duration: number,
+    feetPos: Vector3,
+    alpha: number,
+    readonly swingScale: number,   // 1.0 warrior, 0.65 rogue
+    private readonly duration: number,
   ) {
-    this.duration = duration
-    this.root = new TransformNode('slash_root', scene)
-    this.root.position.copyFrom(position)
+    const fwdX = -Math.cos(alpha)
+    const fwdZ = -Math.sin(alpha)
 
-    // Three slightly fanned planes give a sweeping arc look
-    const offsets = [-0.28, 0, 0.28]
-    offsets.forEach((yOff, i) => {
-      const plane = MeshBuilder.CreatePlane(`slash_${i}`, { size }, scene)
-      plane.parent = this.root
-      plane.rotation.y = facingAlpha + yOff + Math.PI / 2
-      plane.rotation.x = (i - 1) * 0.12   // slight tilt per blade
+    this.hitRange = 2.2 * swingScale
+    this.hitPos   = new Vector3(
+      feetPos.x + fwdX * this.hitRange * 0.6,
+      feetPos.y + 1.1,
+      feetPos.z + fwdZ * this.hitRange * 0.6,
+    )
 
-      const mat = new StandardMaterial(`slashMat_${i}`, scene)
-      mat.diffuseColor    = new Color3(1, 0.95, 0.25)
-      mat.emissiveColor   = new Color3(1, 0.8, 0.05)
-      mat.backFaceCulling = false
-      mat.alpha = 0.88
-      plane.material = mat
-      this.planes.push(plane)
-    })
+    this.pivot = new TransformNode('swingPivot', scene)
+    this.pivot.position.copyFrom(this.hitPos)
+    this.pivot.rotation.y = alpha
+    this.pivot.rotation.x = -1.1   // sword starts raised
+
+    if (swordRoot) {
+      const clone = swordRoot.clone('swordSwing', this.pivot, false)
+      if (clone) {
+        clone.setEnabled(true)
+        clone.scaling.setAll(swingScale)
+        clone.getChildMeshes(false).forEach(m => { m.setEnabled(true); m.isVisible = true })
+        this.swordClone = clone
+      }
+    }
+
+    // Fallback blade box (always shown when GLB not ready yet)
+    if (!this.swordClone) {
+      const blade = MeshBuilder.CreateBox('swordBlade', {
+        width:  0.08 * swingScale,
+        height: 1.4  * swingScale,
+        depth:  0.04,
+      }, scene)
+      blade.parent = this.pivot
+      blade.position.set(0, 0.5 * swingScale, 0)
+      const mat = new StandardMaterial('bladeMat_' + Math.random(), scene)
+      mat.diffuseColor  = new Color3(0.80, 0.88, 1.0)
+      mat.emissiveColor = new Color3(0.15, 0.25, 0.5)
+      mat.alpha = 0.92
+      blade.material = mat
+      this.fallback = blade
+    }
   }
 
   update(dt: number): boolean {
     this.elapsed += dt
-    const t = this.elapsed / this.duration
-    // Scale up from a small stub to full size
-    const s = 0.25 + t * 0.75
-    this.root.scaling.setAll(s)
-    // Fade out faster toward the end
-    this.planes.forEach(p => {
-      ;(p.material as StandardMaterial).alpha = 0.88 * (1 - t * t)
-    })
+    const t = Math.min(1, this.elapsed / this.duration)
+    this.pivot.rotation.x = -1.1 + 2.1 * t   // sweep from raised to forward-down
+
+    if (!this.hitFired && t >= 0.45) {
+      this.hitFired = true
+      this.onHitCheck?.(this.hitPos, this.hitRange)
+    }
     return this.elapsed >= this.duration
   }
 
   dispose() {
-    this.planes.forEach(p => p.dispose())
-    this.root.dispose()
+    this.swordClone?.getChildMeshes(false).forEach(m => m.dispose())
+    this.swordClone?.dispose()
+    this.fallback?.dispose()
+    this.pivot.dispose()
   }
 }
 
-// ── Projectile (wizard fire bolt / archer arrow) ────────────────────────────
+//  Projectile (wizard firebolt / archer arrow) 
 class Projectile implements Effect {
   private readonly mesh: Mesh
+  private readonly position: Vector3
   private elapsed = 0
-  private readonly maxLife = 3      // seconds before auto-despawn
-  private readonly speed: number
-  private readonly dir: Vector3
+  private disposed = false
+
+  /** Return true from onHitCheck to remove the projectile (hit something). */
+  onHitCheck: ((pos: Vector3, radius: number) => boolean) | null = null
+
+  /** Called when a firebolt explodes, for area-of-effect damage. */
+  onExplode: ((pos: Vector3, splashRadius: number) => void) | null = null
 
   constructor(
-    scene: Scene,
+    private readonly scene: Scene,
     startPos: Vector3,
-    dir: Vector3,
-    speed: number,
+    private readonly dir: Vector3,
+    private readonly speed: number,
     color: Color3,
     radius: number,
     isArrow: boolean,
+    private readonly isFirebolt: boolean,
+    private readonly maxLife = 3,
   ) {
-    this.speed = speed
-    this.dir   = dir.normalize().clone()
+    this.position = startPos.clone()
 
     if (isArrow) {
       this.mesh = MeshBuilder.CreateCylinder('arrow', {
         height: 1.1, diameter: 0.07, tessellation: 6,
       }, scene)
-      // Align the cylinder (default Y-axis) to face the travel direction
-      const yaw   = Math.atan2(dir.x, dir.z)
-      const pitch = -Math.asin(Math.max(-1, Math.min(1, dir.y)))
-      this.mesh.rotation.y = yaw
-      this.mesh.rotation.x = pitch + Math.PI / 2
+      this.mesh.rotation.y = Math.atan2(dir.x, dir.z)
+      this.mesh.rotation.x = -Math.asin(Math.max(-1, Math.min(1, dir.y))) + Math.PI / 2
     } else {
       this.mesh = MeshBuilder.CreateSphere('bolt', { diameter: radius * 2, segments: 7 }, scene)
     }
 
     this.mesh.position.copyFrom(startPos)
-    const mat = new StandardMaterial('projMat', scene)
+    const mat = new StandardMaterial('projMat_' + Math.random(), scene)
     mat.diffuseColor  = color
     mat.emissiveColor = color.scale(0.65)
-    mat.alpha = 1
     this.mesh.material = mat
   }
 
   update(dt: number): boolean {
+    if (this.disposed) return true
     this.elapsed += dt
-    this.mesh.position.addInPlace(this.dir.scale(this.speed * dt))
-    // Begin fading in the second half of life
-    const fadeStart = this.maxLife * 0.55
-    if (this.elapsed > fadeStart) {
-      const t = (this.elapsed - fadeStart) / (this.maxLife - fadeStart)
-      ;(this.mesh.material as StandardMaterial).alpha = Math.max(0, 1 - t)
+    this.position.addInPlace(this.dir.scale(this.speed * dt))
+    this.mesh.position.copyFrom(this.position)
+
+    const hitR = this.isFirebolt ? 0.4 : 0.18
+    if (this.onHitCheck?.(this.position, hitR)) {
+      this.triggerEnd()
+      return true
     }
-    return this.elapsed >= this.maxLife
+
+    // Firebolt detonates on ground
+    if (this.isFirebolt && this.position.y < 0.2) {
+      this.triggerEnd()
+      return true
+    }
+
+    const fadeStart = this.maxLife * 0.6
+    if (this.elapsed > fadeStart) {
+      const a = 1 - (this.elapsed - fadeStart) / (this.maxLife - fadeStart)
+      ;(this.mesh.material as StandardMaterial).alpha = Math.max(0, a)
+    }
+
+    if (this.elapsed >= this.maxLife) {
+      this.triggerEnd()
+      return true
+    }
+    return false
   }
 
-  dispose() { this.mesh.dispose() }
+  private triggerEnd() {
+    if (this.isFirebolt) {
+      spawnExplosion(this.scene, this.position.clone(), 2.5)
+      this.onExplode?.(this.position.clone(), 2.5)
+    }
+  }
+
+  dispose() {
+    if (this.disposed) return
+    this.disposed = true
+    this.mesh.dispose()
+  }
 }
 
-// ── AttackSystem ────────────────────────────────────────────────────────────
+//  AttackSystem 
 export class AttackSystem {
   private effects: Effect[] = []
   private cooldown = 0
 
-  update(dt: number) {
-    if (this.cooldown > 0) this.cooldown = Math.max(0, this.cooldown - dt)
-    this.effects = this.effects.filter(e => {
-      if (e.update(dt)) { e.dispose(); return false }
-      return true
-    })
+  /**
+   * Called when a weapon makes contact.
+   * Return true if something was actually hit at (pos, radius).
+   * damage is how much HP to subtract from whatever is hit.
+   */
+  onHit: ((pos: Vector3, radius: number, damage: number) => boolean) | null = null
+
+  constructor(scene: Scene) {
+    preloadSword(scene)
   }
 
-  canAttack(): boolean { return this.cooldown <= 0 }
+  update(dt: number) {
+    if (this.cooldown > 0) this.cooldown = Math.max(0, this.cooldown - dt)
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      if (this.effects[i].update(dt)) {
+        this.effects[i].dispose()
+        this.effects.splice(i, 1)
+      }
+    }
+  }
 
-  /**
-   * Trigger an attack for the given character class.
-   * feetPos : player feet world position
-   * alpha   : camera yaw  (ArcRotateCamera.alpha)
-   * beta    : camera polar angle from top (ArcRotateCamera.beta)
-   */
+  canAttack():       boolean { return this.cooldown <= 0 }
+  isSwordSwinging(): boolean { return this.effects.some(e => e instanceof SwordSwing) }
+
   attack(
     scene: Scene,
     cls: CharacterClass,
@@ -165,40 +276,39 @@ export class AttackSystem {
     if (!this.canAttack()) return
     this.cooldown = COOLDOWN[cls]
 
-    // XZ player-facing direction (horizontal only, for slashes)
     const fwdX = -Math.cos(alpha)
     const fwdZ = -Math.sin(alpha)
-
-    // Full 3-D camera-forward direction (for projectiles)
-    // ArcRotateCamera position relative to target:
-    //   (cos(α)·sin(β),  cos(β),  sin(α)·sin(β)) * radius
-    // Forward = negate of that, normalized
     const sb = Math.sin(beta), cb = Math.cos(beta)
     const sa = Math.sin(alpha), ca = Math.cos(alpha)
     const dir3 = new Vector3(-ca * sb, -cb, -sa * sb).normalize()
-
-    // Spawn point: in front of the player at chest height
     const chest = feetPos.clone().addInPlaceFromFloats(0, 1.1, 0)
 
     switch (cls) {
       case 'warrior': {
-        const pos = chest.clone().addInPlaceFromFloats(fwdX * 1.4, 0, fwdZ * 1.4)
-        this.effects.push(new SlashEffect(scene, pos, alpha, 2.6, 0.35))
+        const sw = new SwordSwing(scene, feetPos, alpha, 1.0, 0.40)
+        sw.onHitCheck = (pos, range) => { this.onHit?.(pos, range, 2) }
+        this.effects.push(sw)
         break
       }
       case 'rogue': {
-        const pos = chest.clone().addInPlaceFromFloats(fwdX * 1.0, 0, fwdZ * 1.0)
-        this.effects.push(new SlashEffect(scene, pos, alpha, 1.5, 0.26))
+        const sw = new SwordSwing(scene, feetPos, alpha, 0.65, 0.28)
+        sw.onHitCheck = (pos, range) => { this.onHit?.(pos, range, 1) }
+        this.effects.push(sw)
         break
       }
       case 'wizard': {
         const pos = chest.clone().addInPlaceFromFloats(fwdX * 0.5, 0, fwdZ * 0.5)
-        this.effects.push(new Projectile(scene, pos, dir3, 22, new Color3(1, 0.3, 0.05), 0.22, false))
+        const p = new Projectile(scene, pos, dir3, 22, new Color3(1, 0.3, 0.05), 0.22, false, true)
+        p.onHitCheck = (hitPos, r) => this.onHit?.(hitPos, r, 1) ?? false
+        p.onExplode  = (expPos, r) => { this.onHit?.(expPos, r, 1) }
+        this.effects.push(p)
         break
       }
       case 'archer': {
         const pos = chest.clone().addInPlaceFromFloats(fwdX * 0.5, 0.1, fwdZ * 0.5)
-        this.effects.push(new Projectile(scene, pos, dir3, 30, new Color3(0.85, 0.65, 0.2), 0.065, true))
+        const p = new Projectile(scene, pos, dir3, 30, new Color3(0.85, 0.65, 0.2), 0.065, true, false)
+        p.onHitCheck = (hitPos, r) => this.onHit?.(hitPos, r, 1) ?? false
+        this.effects.push(p)
         break
       }
     }
@@ -206,6 +316,6 @@ export class AttackSystem {
 
   dispose() {
     this.effects.forEach(e => e.dispose())
-    this.effects = []
+    this.effects.length = 0
   }
 }

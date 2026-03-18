@@ -4,6 +4,7 @@ import { Player } from './player'
 import { RemotePlayer } from './remote'
 import { Network } from './network'
 import { DebugPanel } from './debug'
+import { MonsterManager } from './monsters'
 
 // ── Engine & Scene ──────────────────────────────────────────────────────────
 const canvas  = document.getElementById('renderCanvas') as HTMLCanvasElement
@@ -11,11 +12,19 @@ const engine  = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil:
 const scene   = new Scene(engine)
 
 // ── Game objects ────────────────────────────────────────────────────────────
-const world   = new World(scene)
-const player  = new Player(scene, world.buildings)
-const remote  = new RemotePlayer(scene)
-const network = new Network()
-const debug   = new DebugPanel(canvas)
+const world    = new World(scene)
+const player   = new Player(scene, world.buildings)
+const remote   = new RemotePlayer(scene)
+const network  = new Network()
+const debug    = new DebugPanel(canvas)
+const monsters = new MonsterManager(scene)
+
+// Wire attack hits → monster damage
+player.attackSystem.onHit = (pos, radius, damage) =>
+  monsters.checkHit(pos, radius, damage)
+
+// Wire player death → respawn
+player.health.onDeath = () => player.respawn()
 
 // Reflect the randomly-chosen starting character in the debug panel
 debug.setCharacter(player.currentClass)
@@ -97,6 +106,7 @@ engine.runRenderLoop(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05)
 
   player.update(dt)
+  monsters.update(dt, player.position, player.health, player.attackSystem)
 
   sendTimer += dt
   if (sendTimer >= SEND_INTERVAL) {

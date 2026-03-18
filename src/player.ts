@@ -13,6 +13,7 @@ import {
 } from '@babylonjs/core'
 import type { BuildingDef, PlayerState, CharacterClass } from './types'
 import { AttackSystem } from './attacks'
+import { HealthSystem } from './health'
 
 const GRAVITY        = -28    // m/s²
 const JUMP_VELOCITY  =  39    // m/s upward on jump
@@ -60,7 +61,8 @@ function randomClass(): CharacterClass {
 export class Player {
   readonly mesh: Mesh                   // capsule — physics placeholder (hidden once GLB loads)
   readonly camera: ArcRotateCamera
-  readonly attackSystem = new AttackSystem()
+  readonly attackSystem: AttackSystem
+  readonly health: HealthSystem
 
   currentClass: CharacterClass = randomClass()
 
@@ -72,14 +74,17 @@ export class Player {
   private charRoot: TransformNode | null = null
   private charYOffset = 0              // auto-measured feet offset
   private facingY = 0                   // last movement-facing rotation
+  private modelLoaded = false           // true once GLB is shown
 
   private readonly keys: Record<string, boolean> = {}
   private readonly buildings: BuildingDef[]
   private readonly scene: Scene
 
   constructor(scene: Scene, buildings: BuildingDef[]) {
-    this.scene     = scene
-    this.buildings = buildings
+    this.scene        = scene
+    this.buildings    = buildings
+    this.attackSystem = new AttackSystem(scene)
+    this.health       = new HealthSystem(10)
 
     // Visual mesh (capsule centred at feet + PLAYER_HEIGHT/2)
     this.mesh = MeshBuilder.CreateCapsule('player', {
@@ -178,7 +183,8 @@ export class Player {
       const bottomY = meshBottomY(result.meshes)
       this.charYOffset = -bottomY   // lift by this amount each frame
 
-      this.charRoot = root
+      this.charRoot    = root
+      this.modelLoaded = true
       this.mesh.isVisible = false   // hide capsule now that model is ready
     } catch (err) {
       console.error('[Player] Failed to load character model', cls, err)
@@ -221,10 +227,7 @@ export class Player {
     this.position.z += this.velocity.z * dt
 
     // Respawn if fallen off the world
-    if (this.position.y < RESPAWN_Y) {
-      this.position.copyFrom(SPAWN)
-      this.velocity.setAll(0)
-    }
+    if (this.position.y < RESPAWN_Y) this.respawn()
 
     // Collisions (sets onGround)
     this.onGround = false
@@ -255,8 +258,23 @@ export class Player {
     // Camera tracks the mesh centre
     this.camera.target.copyFrom(this.mesh.position)
 
+    // Tick health (invulnerability timer) + apply blink visibility
+    this.health.update(dt)
+    this.setVisible(this.health.blinkVisible())
+
     // Tick attack effects
     this.attackSystem.update(dt)
+  }
+
+  respawn() {
+    this.position.copyFrom(SPAWN)
+    this.velocity.setAll(0)
+    this.health.reset()
+  }
+
+  private setVisible(v: boolean) {
+    if (!this.modelLoaded) this.mesh.isVisible = v
+    this.charRoot?.getChildMeshes(false).forEach(m => { m.isVisible = v })
   }
 
   private resolveCollisions() {
