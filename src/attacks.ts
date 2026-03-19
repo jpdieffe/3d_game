@@ -104,20 +104,23 @@ export class SwordSwing implements Effect {
     this.yawPivot.position.copyFrom(posRef)
     this.yawPivot.rotation.y = facingYaw
 
-    // ── Inner swing node — pushed forward so the sword sits in front ──────
+    // ── Inner swing node ──────────────────────────────────────────────────
     this.swingPivot = new TransformNode('swingPitch', scene)
     this.swingPivot.parent = this.yawPivot
-    this.swingPivot.position.set(0, 1.1, 0.9 * sw)   // pushed well forward
 
     // Determine swing type and start angle
     this.isHorizontal = strafeDir !== 0
     if (this.isHorizontal) {
-      // +1 strafe right → left-to-right: y sweeps +1.3 → -1.3
-      // -1 strafe left  → right-to-left: y sweeps -1.3 → +1.3
+      // Position closer to player — blade will extend forward once tilted
+      this.swingPivot.position.set(0, 1.1, 0.3 * sw)
+      // rotation.x = -PI/2 tilts the sword from pointing UP to pointing FORWARD (+Z)
+      // Then we animate rotation.y to sweep left↔right
       this.yStart = strafeDir > 0 ? +1.3 : -1.3
       this.yEnd   = strafeDir > 0 ? -1.3 : +1.3
+      this.swingPivot.rotation.x = -Math.PI / 2
       this.swingPivot.rotation.y = this.yStart
     } else {
+      this.swingPivot.position.set(0, 1.1, 0.9 * sw)
       this.yStart = -1.2  // unused in vertical, stored for symmetry
       this.yEnd   =  1.3
       this.swingPivot.rotation.x = -1.2   // sword starts raised/behind
