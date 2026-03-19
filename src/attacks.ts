@@ -113,8 +113,8 @@ export class SwordSwing implements Effect {
     if (this.isHorizontal) {
       // swingPivot ONLY sweeps Y — no X rotation on this node
       this.swingPivot.position.set(0, 1.1, 0.5 * sw)
-      this.yStart = strafeDir > 0 ? +1.3 : -1.3
-      this.yEnd   = strafeDir > 0 ? -1.3 : +1.3
+      this.yStart = strafeDir > 0 ? -1.3 : +1.3
+      this.yEnd   = strafeDir > 0 ? +1.3 : -1.3
       this.swingPivot.rotation.y = this.yStart
       // bladeRoot is a child of swingPivot — rotation.x here tilts the blade
       // to point forward (+Z) without affecting the Y sweep above
