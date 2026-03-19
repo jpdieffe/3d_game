@@ -76,7 +76,7 @@ export class Network {
 
   join(roomId: string, onConnected: () => void) {
     this.destroy()
-    this.peer = new Peer(undefined, {
+    this.peer = new Peer({
       host: '0.peerjs.com',
       port: 443,
       path: '/',

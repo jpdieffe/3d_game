@@ -52,17 +52,22 @@ interface Effect {
 // ── Sword Swing ──────────────────────────────────────────────────────────────
 // Uses a two-node hierarchy:
 //  yawPivot  – tracks posRef live; rotation.y = facing yaw
-//  swingPivot – child of yawPivot; placed in front; rotation.x sweeps top-down
-// This ensures the sweep is always in the character's local pitch axis so the
-// swing direction correctly follows any facing direction.
+//  swingPivot – child of yawPivot; placed in front
+//
+// Swing type depends on strafe direction at the moment of attack:
+//  strafeDir = 0  → top-down slash  (rotation.x sweep)
+//  strafeDir = +1 → left-to-right   (rotation.y sweep, strafing right)
+//  strafeDir = -1 → right-to-left   (rotation.y sweep, strafing left)
 export class SwordSwing implements Effect {
-  private readonly yawPivot:   TransformNode   // tracks player position + yaw
-  private readonly swingPivot: TransformNode   // child; sweeps rotation.x
+  private readonly yawPivot:   TransformNode
+  private readonly swingPivot: TransformNode
   private readonly blades: Mesh[] = []
   private elapsed = 0
   private hitFired = false
+  private readonly isHorizontal: boolean
+  private readonly yStart: number
+  private readonly yEnd:   number
 
-  // Updated each frame as posRef moves
   readonly hitPos: Vector3
   readonly hitRange: number
   private readonly fwdX: number
@@ -73,18 +78,18 @@ export class SwordSwing implements Effect {
 
   constructor(
     scene: Scene,
-    // Pass the LIVE Vector3 — sword tracks the wielder each frame
     private readonly posRef: Vector3,
     alpha: number,
     readonly swingScale: number,   // 1.0 warrior, 0.65 rogue
     private readonly duration: number,
+    /** -1 strafing left, 0 neutral/forward, +1 strafing right */
+    strafeDir: number = 0,
   ) {
     const sw = swingScale
 
     this.fwdX = -Math.cos(alpha)
     this.fwdZ = -Math.sin(alpha)
 
-    // Correct yaw so local +Z of the pivot faces the character's forward direction
     const facingYaw = Math.atan2(this.fwdX, this.fwdZ)
 
     this.hitRange = 2.0 * sw
@@ -99,21 +104,33 @@ export class SwordSwing implements Effect {
     this.yawPivot.position.copyFrom(posRef)
     this.yawPivot.rotation.y = facingYaw
 
-    // ── Inner swing node — child; offset forward in local space ───────────
+    // ── Inner swing node — pushed forward so the sword sits in front ──────
     this.swingPivot = new TransformNode('swingPitch', scene)
     this.swingPivot.parent = this.yawPivot
-    // z > 0 = in front of character (yawPivot's local +Z = forward)
-    this.swingPivot.position.set(0, 1.1, 0.35 * sw)
-    this.swingPivot.rotation.x = -1.2   // sword starts raised/behind
+    this.swingPivot.position.set(0, 1.1, 0.9 * sw)   // pushed well forward
 
-    // ── Blade ──────────────────────────────────────────────────────────────
+    // Determine swing type and start angle
+    this.isHorizontal = strafeDir !== 0
+    if (this.isHorizontal) {
+      // +1 strafe right → left-to-right: y sweeps +1.3 → -1.3
+      // -1 strafe left  → right-to-left: y sweeps -1.3 → +1.3
+      this.yStart = strafeDir > 0 ? +1.3 : -1.3
+      this.yEnd   = strafeDir > 0 ? -1.3 : +1.3
+      this.swingPivot.rotation.y = this.yStart
+    } else {
+      this.yStart = -1.2  // unused in vertical, stored for symmetry
+      this.yEnd   =  1.3
+      this.swingPivot.rotation.x = -1.2   // sword starts raised/behind
+    }
+
+    // ── Blade (2× bigger) ─────────────────────────────────────────────────
     const blade = MeshBuilder.CreateBox('blade', {
-      width:  0.065 * sw,
-      height: 1.55  * sw,
-      depth:  0.022,
+      width:  0.13  * sw,
+      height: 3.1   * sw,
+      depth:  0.044,
     }, scene)
-    blade.parent   = this.swingPivot
-    blade.position.y = 0.8 * sw
+    blade.parent     = this.swingPivot
+    blade.position.y = 1.6 * sw
     const bladeM = new StandardMaterial('bladeM_' + Math.random(), scene)
     bladeM.diffuseColor  = new Color3(0.85, 0.90, 1.00)
     bladeM.emissiveColor = new Color3(0.20, 0.30, 0.60)
@@ -121,11 +138,11 @@ export class SwordSwing implements Effect {
     blade.material = bladeM
     this.blades.push(blade)
 
-    // ── Cross-guard ────────────────────────────────────────────────────────
+    // ── Cross-guard (2× bigger) ───────────────────────────────────────────
     const guard = MeshBuilder.CreateBox('guard', {
-      width:  0.38 * sw,
-      height: 0.055 * sw,
-      depth:  0.07,
+      width:  0.76 * sw,
+      height: 0.11 * sw,
+      depth:  0.14,
     }, scene)
     guard.parent = this.swingPivot
     const guardM = new StandardMaterial('guardM_' + Math.random(), scene)
@@ -134,12 +151,12 @@ export class SwordSwing implements Effect {
     guard.material = guardM
     this.blades.push(guard)
 
-    // ── Handle ─────────────────────────────────────────────────────────────
+    // ── Handle (2× bigger) ───────────────────────────────────────────────
     const handle = MeshBuilder.CreateCylinder('handle', {
-      height: 0.30 * sw, diameter: 0.048 * sw, tessellation: 8,
+      height: 0.60 * sw, diameter: 0.096 * sw, tessellation: 8,
     }, scene)
     handle.parent    = this.swingPivot
-    handle.position.y = -0.17 * sw
+    handle.position.y = -0.34 * sw
     const handleM = new StandardMaterial('handleM_' + Math.random(), scene)
     handleM.diffuseColor = new Color3(0.32, 0.16, 0.04)
     handle.material = handleM
@@ -153,8 +170,13 @@ export class SwordSwing implements Effect {
     // Track wielder — update outer yaw node every frame
     this.yawPivot.position.copyFrom(this.posRef)
 
-    // Sweep pitch: raised (-1.2) → forward-down (+1.3) — top-down slash
-    this.swingPivot.rotation.x = -1.2 + 2.5 * t
+    if (this.isHorizontal) {
+      // Horizontal sweep: rotate around local Y
+      this.swingPivot.rotation.y = this.yStart + (this.yEnd - this.yStart) * t
+    } else {
+      // Vertical sweep: raised (-1.2) → forward-down (+1.3) — top-down slash
+      this.swingPivot.rotation.x = -1.2 + 2.5 * t
+    }
 
     // Keep hit position tracking the wielder
     this.hitPos.set(
@@ -300,6 +322,7 @@ export class AttackSystem {
     feetPos: Vector3,
     alpha: number,
     beta: number,
+    strafeDir: number = 0,
   ) {
     if (!this.canAttack()) return
     this.cooldown = COOLDOWN[cls]
@@ -313,13 +336,13 @@ export class AttackSystem {
 
     switch (cls) {
       case 'warrior': {
-        const sw = new SwordSwing(scene, feetPos, alpha, 1.0, 0.20)
+        const sw = new SwordSwing(scene, feetPos, alpha, 1.0, 0.20, strafeDir)
         sw.onHitCheck = (pos, range) => { this.onHit?.(pos, range, 2) }
         this.effects.push(sw)
         break
       }
       case 'rogue': {
-        const sw = new SwordSwing(scene, feetPos, alpha, 0.65, 0.14)
+        const sw = new SwordSwing(scene, feetPos, alpha, 0.65, 0.14, strafeDir)
         sw.onHitCheck = (pos, range) => { this.onHit?.(pos, range, 1) }
         this.effects.push(sw)
         break

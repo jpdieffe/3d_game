@@ -117,12 +117,20 @@ export class Player {
     canvas.addEventListener('mousedown', e => {
       if (e.button !== 0) return
       if (document.pointerLockElement === canvas) {
+        // Compute strafe direction: -1 = moving left, 0 = neutral, +1 = moving right
+        const _rgtX = -Math.sin(this.camera.alpha)
+        const _rgtZ =  Math.cos(this.camera.alpha)
+        let strafeDir = 0
+        if (this.keys['KeyA'] || this.keys['ArrowLeft'])  strafeDir -= 1
+        if (this.keys['KeyD'] || this.keys['ArrowRight']) strafeDir += 1
+        // If strafing both directions, cancel out
         this.attackSystem.attack(
           scene,
           this.currentClass,
           this.position,
           this.camera.alpha,
           this.camera.beta,
+          strafeDir,
         )
         this.onAttack?.(this.currentClass, this.camera.alpha, this.camera.beta)
       } else {
