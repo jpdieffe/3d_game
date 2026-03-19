@@ -252,11 +252,9 @@ export class Player {
       this.position.y + PLAYER_HEIGHT / 2,
       this.position.z,
     )
-    // Face movement direction when moving
-    if (len > 0) {
-      this.facingY         = Math.atan2(mx, mz)
-      this.mesh.rotation.y = this.facingY
-    }
+    // Model always faces the camera's look direction (mouse turning rotates the character)
+    this.facingY         = Math.atan2(fwdX, fwdZ)
+    this.mesh.rotation.y = this.facingY
 
     // Sync loaded character model to feet position (Y offset auto-measured from bounding box)
     if (this.charRoot) {
