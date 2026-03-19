@@ -61,6 +61,7 @@ interface Effect {
 export class SwordSwing implements Effect {
   private readonly yawPivot:   TransformNode
   private readonly swingPivot: TransformNode
+  private bladeRoot: TransformNode | null = null  // horizontal only
   private readonly blades: Mesh[] = []
   private elapsed = 0
   private hitFired = false
@@ -108,23 +109,27 @@ export class SwordSwing implements Effect {
     this.swingPivot = new TransformNode('swingPitch', scene)
     this.swingPivot.parent = this.yawPivot
 
-    // Determine swing type and start angle
     this.isHorizontal = strafeDir !== 0
     if (this.isHorizontal) {
-      // Position closer to player — blade will extend forward once tilted
-      this.swingPivot.position.set(0, 1.1, 0.3 * sw)
-      // rotation.x = -PI/2 tilts the sword from pointing UP to pointing FORWARD (+Z)
-      // Then we animate rotation.y to sweep left↔right
+      // swingPivot ONLY sweeps Y — no X rotation on this node
+      this.swingPivot.position.set(0, 1.1, 0.5 * sw)
       this.yStart = strafeDir > 0 ? +1.3 : -1.3
       this.yEnd   = strafeDir > 0 ? -1.3 : +1.3
-      this.swingPivot.rotation.x = -Math.PI / 2
       this.swingPivot.rotation.y = this.yStart
+      // bladeRoot is a child of swingPivot — rotation.x here tilts the blade
+      // to point forward (+Z) without affecting the Y sweep above
+      // rotation.x = +PI/2 maps blade local +Y → parent +Z (forward)
+      this.bladeRoot = new TransformNode('bladeRoot', scene)
+      this.bladeRoot.parent = this.swingPivot
+      this.bladeRoot.rotation.x = Math.PI / 2
     } else {
       this.swingPivot.position.set(0, 1.1, 0.9 * sw)
-      this.yStart = -1.2  // unused in vertical, stored for symmetry
+      this.yStart = -1.2
       this.yEnd   =  1.3
       this.swingPivot.rotation.x = -1.2   // sword starts raised/behind
     }
+
+    const bladeParent = this.bladeRoot ?? this.swingPivot
 
     // ── Blade (2× bigger) ─────────────────────────────────────────────────
     const blade = MeshBuilder.CreateBox('blade', {
@@ -132,7 +137,7 @@ export class SwordSwing implements Effect {
       height: 3.1   * sw,
       depth:  0.044,
     }, scene)
-    blade.parent     = this.swingPivot
+    blade.parent     = bladeParent
     blade.position.y = 1.6 * sw
     const bladeM = new StandardMaterial('bladeM_' + Math.random(), scene)
     bladeM.diffuseColor  = new Color3(0.85, 0.90, 1.00)
@@ -147,7 +152,7 @@ export class SwordSwing implements Effect {
       height: 0.11 * sw,
       depth:  0.14,
     }, scene)
-    guard.parent = this.swingPivot
+    guard.parent = bladeParent
     const guardM = new StandardMaterial('guardM_' + Math.random(), scene)
     guardM.diffuseColor  = new Color3(0.72, 0.55, 0.12)
     guardM.emissiveColor = new Color3(0.28, 0.18, 0.00)
@@ -158,7 +163,7 @@ export class SwordSwing implements Effect {
     const handle = MeshBuilder.CreateCylinder('handle', {
       height: 0.60 * sw, diameter: 0.096 * sw, tessellation: 8,
     }, scene)
-    handle.parent    = this.swingPivot
+    handle.parent    = bladeParent
     handle.position.y = -0.34 * sw
     const handleM = new StandardMaterial('handleM_' + Math.random(), scene)
     handleM.diffuseColor = new Color3(0.32, 0.16, 0.04)
@@ -197,6 +202,7 @@ export class SwordSwing implements Effect {
 
   dispose() {
     this.blades.forEach(b => { b.material?.dispose(); b.dispose() })
+    this.bladeRoot?.dispose()
     this.swingPivot.dispose()
     this.yawPivot.dispose()
   }
