@@ -230,18 +230,21 @@ class Monster {
         this.strafeSwitchTimer = 2 + Math.random() * 3
       }
 
+      // Context-steer around walls (flyers go straight over buildings)
+      const steer = this.def.flies ? toPlayerN : this.steerDir(toPlayerN, buildings)
+
       if (dist > this.def.attackRadius * 0.9) {
-        // Blend straight chase with a perpendicular strafe component
-        const strafeX = -toPlayerN.z * this.strafeDir
-        const strafeZ =  toPlayerN.x * this.strafeDir
+        // Blend steered direction with a perpendicular strafe component
+        const strafeX = -steer.z * this.strafeDir
+        const strafeZ =  steer.x * this.strafeDir
         const blendChase  = 0.65
         const blendStrafe = 0.35
-        this.velocity.x = (toPlayerN.x * blendChase + strafeX * blendStrafe) * this.def.speed
-        this.velocity.z = (toPlayerN.z * blendChase + strafeZ * blendStrafe) * this.def.speed
+        this.velocity.x = (steer.x * blendChase + strafeX * blendStrafe) * this.def.speed
+        this.velocity.z = (steer.z * blendChase + strafeZ * blendStrafe) * this.def.speed
       } else {
         // In attack range: circle the player
-        const circleX = -toPlayerN.z * this.strafeDir
-        const circleZ =  toPlayerN.x * this.strafeDir
+        const circleX = -steer.z * this.strafeDir
+        const circleZ =  steer.x * this.strafeDir
         this.velocity.x = circleX * this.def.speed * 0.55
         this.velocity.z = circleZ * this.def.speed * 0.55
       }
@@ -291,6 +294,54 @@ class Monster {
       )
       this.root.rotation.y = this.facingY
     }
+  }
+
+  /**
+   * Context steering: sample 16 candidate directions and return the one
+   * best aligned with `desired` while avoiding nearby building walls.
+   * Penalties are applied when a lookahead probe lands inside a building,
+   * causing the monster to naturally route around corners.
+   */
+  private steerDir(desired: Vector3, buildings: BuildingDef[]): Vector3 {
+    const LOOKAHEAD = 3.5   // metres ahead to probe
+    const PAD       = 1.8   // monster radius + a little margin
+    const SAMPLES   = 16
+
+    let bestScore = -Infinity
+    let bestX = desired.x
+    let bestZ = desired.z
+
+    for (let i = 0; i < SAMPLES; i++) {
+      const a  = (i / SAMPLES) * Math.PI * 2
+      const dx = Math.cos(a)
+      const dz = Math.sin(a)
+
+      // Base score: how well this direction points toward the player
+      let score = dx * desired.x + dz * desired.z
+
+      // Heavily penalise directions whose near/far probe lands inside a wall
+      const nx = this.position.x + dx * LOOKAHEAD
+      const nz = this.position.z + dz * LOOKAHEAD
+      const nx2 = this.position.x + dx * (LOOKAHEAD * 0.4)   // close probe
+      const nz2 = this.position.z + dz * (LOOKAHEAD * 0.4)
+
+      for (const b of buildings) {
+        const hw = b.width  / 2 + PAD
+        const hd = b.depth  / 2 + PAD
+        const inFar   = nx  > b.x - hw && nx  < b.x + hw && nz  > b.z - hd && nz  < b.z + hd
+        const inNear  = nx2 > b.x - hw && nx2 < b.x + hw && nz2 > b.z - hd && nz2 < b.z + hd
+        if (inNear)  { score -= 4.0; break }
+        if (inFar)   { score -= 2.5; break }
+      }
+
+      if (score > bestScore) {
+        bestScore = score
+        bestX = dx
+        bestZ = dz
+      }
+    }
+
+    return new Vector3(bestX, 0, bestZ)
   }
 
   private resolveWalls(buildings: BuildingDef[]) {

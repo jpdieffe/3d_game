@@ -1,0 +1,1 @@
+import"./shaderStore-1xgJNigV.js";import"./boundingBoxRendererUboDeclaration-DJnyIJHx.js";import{R as e}from"./index-0NYEWTXM.js";export{e as boundingBoxRendererVertexShader};
