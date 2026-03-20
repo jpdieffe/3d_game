@@ -4,6 +4,8 @@ A 2-player multiplayer 3D browser game. Jump across buildings with a friend — 
 
 **Play here:** https://jpdieffe.github.io/3d_game
 
+**Map Editor:** https://jpdieffe.github.io/3d_game/editor.html
+
 ## How to play
 
 1. One player clicks **Host Game** and copies the room code
