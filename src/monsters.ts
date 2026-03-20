@@ -13,6 +13,7 @@ import {
 import { SwordSwing, spawnExplosion } from './attacks'
 import type { HealthSystem } from './health'
 import type { AttackSystem }  from './attacks'
+import type { BuildingDef } from './types'
 
 // ── Monster type definitions ─────────────────────────────────────────────────
 export type MonsterType = 'slime' | 'spider' | 'wolf' | 'goblin' | 'imp' | 'orc'
@@ -116,6 +117,11 @@ class Monster {
   private projectiles:  MonsterProjectile[] = []
   private swings:       SwordSwing[]        = []
 
+  // Body centre for hit detection — mid-point of a ~4-unit tall creature
+  get bodyCenter(): Vector3 {
+    return new Vector3(this.position.x, this.position.y + 2, this.position.z)
+  }
+
   constructor(
     private readonly scene: Scene,
     readonly type: MonsterType,
@@ -187,6 +193,7 @@ class Monster {
     playerPos: Vector3,
     playerHealth: HealthSystem,
     playerAttackSys: AttackSystem,
+    buildings: BuildingDef[],
   ) {
     if (!this.alive) return
 
@@ -272,6 +279,9 @@ class Monster {
       this.velocity.y = 0
     }
 
+    // Building AABB wall collision (same axis-push logic as Player)
+    this.resolveWalls(buildings)
+
     // Sync mesh
     if (this.root) {
       this.root.position.set(
@@ -280,6 +290,46 @@ class Monster {
         this.position.z,
       )
       this.root.rotation.y = this.facingY
+    }
+  }
+
+  private resolveWalls(buildings: BuildingDef[]) {
+    const R = 1.5   // monster half-width (scale-4 creature is ~3 units wide)
+    const H = 4.0   // monster height
+
+    for (const b of buildings) {
+      const hw = b.width / 2
+      const hd = b.depth / 2
+
+      const mL = this.position.x - R,  mR = this.position.x + R
+      const mBk = this.position.z - R, mFr = this.position.z + R
+      const mFt = this.position.y,     mTp = this.position.y + H
+
+      const bL = b.x - hw, bR = b.x + hw
+      const bBk = b.z - hd, bFr = b.z + hd
+
+      const overlapX = Math.min(mR, bR)   - Math.max(mL, bL)
+      const overlapY = Math.min(mTp, b.height) - Math.max(mFt, 0)
+      const overlapZ = Math.min(mFr, bFr) - Math.max(mBk, bBk)
+
+      if (overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) continue
+
+      if (overlapY <= overlapX && overlapY <= overlapZ) {
+        // Land on roof
+        const midY = mFt + H / 2
+        if (midY >= b.height / 2) {
+          this.position.y = b.height
+          if (this.velocity.y < 0) this.velocity.y = 0
+        }
+      } else if (overlapX <= overlapZ) {
+        if (this.position.x < b.x) this.position.x = bL - R
+        else                       this.position.x = bR + R
+        this.velocity.x = 0
+      } else {
+        if (this.position.z < b.z) this.position.z = bBk - R
+        else                       this.position.z = bFr + R
+        this.velocity.z = 0
+      }
     }
   }
 
@@ -355,7 +405,10 @@ export class MonsterManager {
   private respawnTimer = 0
   private readonly RESPAWN_INTERVAL = 20   // seconds between spawns
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    private readonly buildings: BuildingDef[] = [],
+  ) {
     this.spawnInitial()
   }
 
@@ -384,7 +437,9 @@ export class MonsterManager {
     let hit = false
     for (const m of this.monsters) {
       if (!m.alive) continue
-      if (Vector3.Distance(pos, m.position) < radius + 0.9) {
+      // Compare against body centre (y+2) with a 2m monster half-width so
+      // arrows/bolts at chest height reliably connect instead of clipping feet.
+      if (Vector3.Distance(pos, m.bodyCenter) < radius + 2.0) {
         m.takeDamage(damage)
         hit = true
       }
@@ -399,7 +454,7 @@ export class MonsterManager {
     playerAttackSys: AttackSystem,
   ) {
     for (const m of this.monsters) {
-      if (m.alive) m.update(dt, playerPos, playerHealth, playerAttackSys)
+      if (m.alive) m.update(dt, playerPos, playerHealth, playerAttackSys, this.buildings)
     }
 
     // Remove dead monsters from the list

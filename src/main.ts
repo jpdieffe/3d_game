@@ -67,7 +67,7 @@ function startGame() {
   const player   = new Player(scene, world.buildings)
   const remote   = new RemotePlayer(scene)
   const debug    = new DebugPanel(canvas)
-  const monsters = new MonsterManager(scene)
+  const monsters = new MonsterManager(scene, world.buildings)
 
   // Wire attack hits → monster damage
   player.attackSystem.onHit = (pos, radius, damage) =>
