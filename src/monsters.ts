@@ -108,6 +108,8 @@ class Monster {
   private yOffset       = 0
   private facingY       = 0
   private atkCooldown:  number
+  private strafeDir          = Math.random() < 0.5 ? 1 : -1
+  private strafeSwitchTimer  = 2 + Math.random() * 3
 
   private projectiles:  MonsterProjectile[] = []
   private swings:       SwordSwing[]        = []
@@ -130,7 +132,7 @@ class Monster {
       const result = await SceneLoader.ImportMeshAsync('', './assets/monsters/', file, this.scene)
       const root = new TransformNode(`mon_${this.type}_root`, this.scene)
       result.meshes.forEach((m: AbstractMesh) => { if (!m.parent) m.parent = root })
-      root.scaling.setAll(2)
+      root.scaling.setAll(4)
       root.position.copyFrom(this.position)
 
       // Auto-measure feet offset (same technique as Player)
@@ -146,7 +148,7 @@ class Monster {
       this.root = root
     } catch {
       // Fallback: coloured box
-      const box = MeshBuilder.CreateBox(`mon_fb_${this.type}`, { size: 2.0 }, this.scene)
+      const box = MeshBuilder.CreateBox(`mon_fb_${this.type}`, { size: 4.0 }, this.scene)
       const mat = new StandardMaterial(`mon_fb_mat_${this.type}`, this.scene)
       mat.diffuseColor = this.def.projColor
       box.material = mat
@@ -200,13 +202,27 @@ class Monster {
     const toPlayerN = toPlayer.normalizeToNew()
 
     if (dist <= this.def.aggroRadius) {
-      // Chase
+      // Tick strafe direction flip
+      this.strafeSwitchTimer -= dt
+      if (this.strafeSwitchTimer <= 0) {
+        this.strafeDir *= -1
+        this.strafeSwitchTimer = 2 + Math.random() * 3
+      }
+
       if (dist > this.def.attackRadius * 0.9) {
-        this.velocity.x = toPlayerN.x * this.def.speed
-        this.velocity.z = toPlayerN.z * this.def.speed
+        // Blend straight chase with a perpendicular strafe component
+        const strafeX = -toPlayerN.z * this.strafeDir
+        const strafeZ =  toPlayerN.x * this.strafeDir
+        const blendChase  = 0.65
+        const blendStrafe = 0.35
+        this.velocity.x = (toPlayerN.x * blendChase + strafeX * blendStrafe) * this.def.speed
+        this.velocity.z = (toPlayerN.z * blendChase + strafeZ * blendStrafe) * this.def.speed
       } else {
-        this.velocity.x = 0
-        this.velocity.z = 0
+        // In attack range: circle the player
+        const circleX = -toPlayerN.z * this.strafeDir
+        const circleZ =  toPlayerN.x * this.strafeDir
+        this.velocity.x = circleX * this.def.speed * 0.55
+        this.velocity.z = circleZ * this.def.speed * 0.55
       }
 
       // Face player

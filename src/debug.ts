@@ -23,6 +23,10 @@ export class DebugPanel {
   /** Fires when the user picks a new character */
   onCharacterChange: ((cls: CharacterClass) => void) | null = null
 
+  /** Fires when the user toggles camera mode */
+  onCameraToggle: ((firstPerson: boolean) => void) | null = null
+  private fpMode = false
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.el = this.buildHTML()
@@ -186,6 +190,39 @@ export class DebugPanel {
     } as Partial<CSSStyleDeclaration>)
     tip.textContent = 'Press ` to close without changing'
     panel.appendChild(tip)
+
+    // ── Camera toggle ──────────────────────────────────────────────────────
+    const divider = document.createElement('div')
+    Object.assign(divider.style, {
+      borderTop:  '1px solid #282848',
+      margin:     '0.4rem 0',
+    } as Partial<CSSStyleDeclaration>)
+    panel.appendChild(divider)
+
+    const camBtn = document.createElement('button')
+    camBtn.id = 'camToggleBtn'
+    Object.assign(camBtn.style, {
+      width:        '100%',
+      padding:      '0.55rem 0.75rem',
+      border:       '2px solid #353570',
+      borderRadius: '8px',
+      background:   'transparent',
+      color:        '#e0e0f0',
+      cursor:       'pointer',
+      fontSize:     '0.9rem',
+      fontWeight:   '700',
+      fontFamily:   'system-ui, sans-serif',
+      transition:   'all 0.12s',
+    } as Partial<CSSStyleDeclaration>)
+    camBtn.textContent = '👁 Switch to First Person'
+    camBtn.addEventListener('mouseenter', () => { camBtn.style.background = '#353570' })
+    camBtn.addEventListener('mouseleave', () => { camBtn.style.background = 'transparent' })
+    camBtn.addEventListener('click', () => {
+      this.fpMode = !this.fpMode
+      camBtn.textContent = this.fpMode ? '👁 Switch to Third Person' : '👁 Switch to First Person'
+      this.onCameraToggle?.(this.fpMode)
+    })
+    panel.appendChild(camBtn)
 
     return panel
   }

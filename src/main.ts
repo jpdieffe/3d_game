@@ -89,6 +89,9 @@ function startGame() {
     debug.setCharacter(cls)
   }
 
+  // Wire camera toggle
+  debug.onCameraToggle = fp => player.setFirstPerson(fp)
+
   // ── Game loop ─────────────────────────────────────────────────────────────
   const SEND_INTERVAL = 1 / 20   // 20 Hz network updates
   let sendTimer = 0

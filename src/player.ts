@@ -66,6 +66,7 @@ export class Player {
 
   currentClass: CharacterClass = randomClass()
   onAttack: ((cls: CharacterClass, alpha: number, beta: number) => void) | null = null
+  isFirstPerson = false
 
   // Physics state — position tracks the FEET
   readonly position = new Vector3(SPAWN.x, SPAWN.y, SPAWN.z)
@@ -171,6 +172,22 @@ export class Player {
   }
 
   // ── Character model loading ───────────────────────────────────────────────
+
+  setFirstPerson(fp: boolean) {
+    this.isFirstPerson = fp
+    if (fp) {
+      this.camera.radius = 0.01
+      this.camera.beta   = Math.PI / 2   // eye-level
+    } else {
+      this.camera.radius = 14
+      this.camera.beta   = Math.PI / 3.5
+    }
+    // Hide/show own model in first person
+    if (this.charRoot) {
+      this.charRoot.getChildMeshes().forEach(m => { m.isVisible = !fp })
+    }
+    this.mesh.isVisible = false  // capsule always hidden
+  }
 
   async loadCharacter(cls: CharacterClass) {
     this.currentClass = cls
