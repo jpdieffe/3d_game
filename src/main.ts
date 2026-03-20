@@ -30,7 +30,27 @@ function networkError(msg: string) {
   statusEl.style.color = '#ff6b6b'
 }
 
-function startGame() {
+async function loadActiveMap(): Promise<MapDef | undefined> {
+  // Editor saves to localStorage — use that map once, then clear it
+  try {
+    const saved = localStorage.getItem('rooftopMap')
+    if (saved) {
+      localStorage.removeItem('rooftopMap')
+      return JSON.parse(saved) as MapDef
+    }
+  } catch { /* fall through */ }
+
+  // Randomly pick from the maps folder
+  try {
+    const manifest: string[] = await fetch('./maps/manifest.json').then(r => r.json())
+    const file = manifest[Math.floor(Math.random() * manifest.length)]
+    return await fetch(`./maps/${file}`).then(r => r.json()) as MapDef
+  } catch { /* use defaults */ }
+
+  return undefined
+}
+
+async function startGame() {
   // ── Engine & Scene ────────────────────────────────────────────────────────
   let engine: Engine | undefined
   // Try WebGL2, then WebGL1 as fallback
@@ -64,11 +84,7 @@ function startGame() {
   const scene   = new Scene(engine)
 
   // ── Game objects ──────────────────────────────────────────────────────────
-  let activeMap: MapDef | undefined
-  try {
-    const saved = localStorage.getItem('rooftopMap')
-    if (saved) activeMap = JSON.parse(saved) as MapDef
-  } catch { /* use defaults */ }
+  const activeMap = await loadActiveMap()
 
   const world    = new World(scene, activeMap)
   const player   = new Player(scene, world.buildings)
