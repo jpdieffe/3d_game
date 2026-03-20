@@ -449,12 +449,19 @@ class Monster {
 
 // ── MonsterManager ────────────────────────────────────────────────────────────
 const INITIAL_TYPES: MonsterType[] = ['slime', 'spider', 'wolf', 'goblin', 'imp', 'orc', 'slime', 'goblin']
-const ALL_TYPES:     MonsterType[] = ['slime', 'spider', 'wolf', 'goblin', 'imp', 'orc']
+
+const RESPAWN_DELAY = 60  // seconds before a dead spawn point comes back
+
+interface SpawnSlot {
+  type: MonsterType
+  pos: Vector3
+  monster: Monster | null
+  cooldown: number   // countdown in seconds; 0 = ready to spawn
+}
 
 export class MonsterManager {
-  private monsters:      Monster[] = []
-  private respawnTimer = 0
-  private readonly RESPAWN_INTERVAL = 20   // seconds between spawns
+  private monsters: Monster[] = []
+  private slots:    SpawnSlot[] = []
 
   constructor(
     private readonly scene: Scene,
@@ -465,26 +472,20 @@ export class MonsterManager {
   }
 
   private spawnInitial() {
-    if (this.initSpawns.length > 0) {
-      this.initSpawns.forEach(s => {
-        this.monsters.push(new Monster(this.scene, s.type, new Vector3(s.x, 0, s.z)))
-      })
-    } else {
-      for (let i = 0; i < INITIAL_TYPES.length; i++) {
-        const angle  = (i / INITIAL_TYPES.length) * Math.PI * 2
-        const radius = 22 + Math.random() * 10
-        const pos    = new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
-        this.monsters.push(new Monster(this.scene, INITIAL_TYPES[i], pos))
-      }
-    }
-  }
+    const defs: Array<{ type: MonsterType; pos: Vector3 }> =
+      this.initSpawns.length > 0
+        ? this.initSpawns.map(s => ({ type: s.type, pos: new Vector3(s.x, 0, s.z) }))
+        : INITIAL_TYPES.map((type, i) => {
+            const angle  = (i / INITIAL_TYPES.length) * Math.PI * 2
+            const radius = 22 + Math.random() * 10
+            return { type, pos: new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius) }
+          })
 
-  private spawnOne() {
-    const type   = ALL_TYPES[Math.floor(Math.random() * ALL_TYPES.length)]
-    const angle  = Math.random() * Math.PI * 2
-    const radius = 24 + Math.random() * 10
-    const pos    = new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
-    this.monsters.push(new Monster(this.scene, type, pos))
+    for (const { type, pos } of defs) {
+      const monster = new Monster(this.scene, type, pos)
+      this.monsters.push(monster)
+      this.slots.push({ type, pos, monster, cooldown: 0 })
+    }
   }
 
   /**
@@ -518,11 +519,23 @@ export class MonsterManager {
     // Remove dead monsters from the list
     this.monsters = this.monsters.filter(m => m.alive)
 
-    // Respawn
-    this.respawnTimer += dt
-    if (this.respawnTimer >= this.RESPAWN_INTERVAL) {
-      this.respawnTimer = 0
-      this.spawnOne()
+    // Per-slot respawn: when a slot's monster dies, start the cooldown
+    for (const slot of this.slots) {
+      if (slot.monster !== null && !slot.monster.alive) {
+        // Monster just died — start cooldown
+        slot.monster  = null
+        slot.cooldown = RESPAWN_DELAY
+      }
+
+      if (slot.monster === null && slot.cooldown > 0) {
+        slot.cooldown -= dt
+        if (slot.cooldown <= 0) {
+          slot.cooldown = 0
+          const m = new Monster(this.scene, slot.type, slot.pos.clone())
+          slot.monster = m
+          this.monsters.push(m)
+        }
+      }
     }
   }
 
