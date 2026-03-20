@@ -226,14 +226,15 @@ class Projectile implements Effect {
     private readonly scene: Scene,
     startPos: Vector3,
     dir: Vector3,
-    private readonly speed: number,
+    speed: number,
     color: Color3,
     radius: number,
     private readonly isArrow: boolean,
     private readonly isFirebolt: boolean,
     private readonly maxLife = 3,
   ) {
-    this.vel = dir.clone()
+    // Store vel as actual velocity (dir * speed) so gravity accumulates correctly
+    this.vel = dir.clone().scale(speed)
     this.position = startPos.clone()
 
     if (isArrow) {
@@ -257,16 +258,16 @@ class Projectile implements Effect {
     if (this.disposed) return true
     this.elapsed += dt
 
-    // Arrow gravity: pull velocity down over time
+    // Arrow gravity: accumulate downward acceleration on the actual velocity vector
     if (this.isArrow) {
-      this.vel.y -= 9.8 * dt
+      this.vel.y -= 4.5 * dt
       // Re-orient arrow mesh to follow the arc
       const hLen = Math.sqrt(this.vel.x * this.vel.x + this.vel.z * this.vel.z)
       this.mesh.rotation.y = Math.atan2(this.vel.x, this.vel.z)
       this.mesh.rotation.x = -Math.atan2(this.vel.y, hLen) + Math.PI / 2
     }
 
-    this.position.addInPlace(this.vel.normalize().scale(this.speed * dt))
+    this.position.addInPlace(this.vel.scale(dt))
     this.mesh.position.copyFrom(this.position)
 
     const hitR = this.isFirebolt ? 0.4 : 0.18

@@ -143,7 +143,9 @@ export class Player {
     window.addEventListener('mousemove', e => {
       if (document.pointerLockElement !== canvas) return
       this.camera.alpha -= e.movementX * SENSITIVITY
-      this.camera.beta  = Math.max(MIN_BETA, Math.min(MAX_BETA,
+      // In first person allow looking far upward (beta > PI/2); TP keeps near-horizontal cap
+      const maxB = this.isFirstPerson ? Math.PI * 0.88 : MAX_BETA
+      this.camera.beta  = Math.max(MIN_BETA, Math.min(maxB,
         this.camera.beta - e.movementY * SENSITIVITY))
     })
 

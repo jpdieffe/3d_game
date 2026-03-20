@@ -90,8 +90,9 @@ function startGame() {
 
   function refreshCrosshair() {
     const locked = document.pointerLockElement === canvas
-    xhArcher.classList.toggle('visible', locked && crosshairClass === 'archer')
-    xhWizard.classList.toggle('visible', locked && crosshairClass === 'wizard')
+    const fp = player.isFirstPerson
+    xhArcher.classList.toggle('visible', locked && fp && crosshairClass === 'archer')
+    xhWizard.classList.toggle('visible', locked && fp && crosshairClass === 'wizard')
   }
 
   document.addEventListener('pointerlockchange', refreshCrosshair)
@@ -105,7 +106,7 @@ function startGame() {
   }
 
   // Wire camera toggle
-  debug.onCameraToggle = fp => player.setFirstPerson(fp)
+  debug.onCameraToggle = fp => { player.setFirstPerson(fp); refreshCrosshair() }
 
   // ── Game loop ─────────────────────────────────────────────────────────────
   const SEND_INTERVAL = 1 / 20   // 20 Hz network updates
