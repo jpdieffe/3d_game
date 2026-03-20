@@ -291,8 +291,11 @@ export class Player {
       this.charRoot.rotation.y = this.facingY
     }
 
-    // Camera tracks the mesh centre
+    // Camera tracks the mesh centre; in first person raise to eye height
     this.camera.target.copyFrom(this.mesh.position)
+    if (this.isFirstPerson) {
+      this.camera.target.y = this.position.y + 1.65
+    }
 
     // Tick health (invulnerability timer) + apply blink visibility
     this.health.update(dt)
