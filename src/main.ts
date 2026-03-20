@@ -5,6 +5,7 @@ import { RemotePlayer } from './remote'
 import { Network } from './network'
 import { DebugPanel } from './debug'
 import { MonsterManager } from './monsters'
+import type { MapDef } from './types'
 
 // ── Lobby UI (initialized immediately — no engine needed) ──────────────────
 const canvas      = document.getElementById('renderCanvas') as HTMLCanvasElement
@@ -63,11 +64,17 @@ function startGame() {
   const scene   = new Scene(engine)
 
   // ── Game objects ──────────────────────────────────────────────────────────
-  const world    = new World(scene)
+  let activeMap: MapDef | undefined
+  try {
+    const saved = localStorage.getItem('rooftopMap')
+    if (saved) activeMap = JSON.parse(saved) as MapDef
+  } catch { /* use defaults */ }
+
+  const world    = new World(scene, activeMap)
   const player   = new Player(scene, world.buildings)
   const remote   = new RemotePlayer(scene)
   const debug    = new DebugPanel(canvas)
-  const monsters = new MonsterManager(scene, world.buildings)
+  const monsters = new MonsterManager(scene, world.buildings, activeMap?.monsterSpawns ?? [])
 
   // Wire attack hits → monster damage
   player.attackSystem.onHit = (pos, radius, damage) =>

@@ -5,6 +5,12 @@ export default defineConfig({
   build: {
     outDir: 'docs',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main:   'index.html',
+        editor: 'editor.html',
+      },
+    },
   },
   // Ensure PeerJS globals are available
   define: {

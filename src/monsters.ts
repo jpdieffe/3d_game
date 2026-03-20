@@ -13,7 +13,7 @@ import {
 import { SwordSwing, spawnExplosion } from './attacks'
 import type { HealthSystem } from './health'
 import type { AttackSystem }  from './attacks'
-import type { BuildingDef } from './types'
+import type { BuildingDef, MonsterSpawnDef } from './types'
 
 // ── Monster type definitions ─────────────────────────────────────────────────
 export type MonsterType = 'slime' | 'spider' | 'wolf' | 'goblin' | 'imp' | 'orc'
@@ -459,16 +459,23 @@ export class MonsterManager {
   constructor(
     private readonly scene: Scene,
     private readonly buildings: BuildingDef[] = [],
+    private readonly initSpawns: MonsterSpawnDef[] = [],
   ) {
     this.spawnInitial()
   }
 
   private spawnInitial() {
-    for (let i = 0; i < INITIAL_TYPES.length; i++) {
-      const angle  = (i / INITIAL_TYPES.length) * Math.PI * 2
-      const radius = 22 + Math.random() * 10
-      const pos    = new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
-      this.monsters.push(new Monster(this.scene, INITIAL_TYPES[i], pos))
+    if (this.initSpawns.length > 0) {
+      this.initSpawns.forEach(s => {
+        this.monsters.push(new Monster(this.scene, s.type, new Vector3(s.x, 0, s.z)))
+      })
+    } else {
+      for (let i = 0; i < INITIAL_TYPES.length; i++) {
+        const angle  = (i / INITIAL_TYPES.length) * Math.PI * 2
+        const radius = 22 + Math.random() * 10
+        const pos    = new Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
+        this.monsters.push(new Monster(this.scene, INITIAL_TYPES[i], pos))
+      }
     }
   }
 

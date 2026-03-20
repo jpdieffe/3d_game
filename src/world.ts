@@ -7,12 +7,14 @@ import {
   Vector3,
   HemisphericLight,
   DirectionalLight,
+  TransformNode,
+  SceneLoader,
 } from '@babylonjs/core'
-import type { BuildingDef } from './types'
+import type { BuildingDef, MapDef } from './types'
+import '@babylonjs/loaders/glTF'
 
-// All buildings are placed on the ground plane (y = 0 is ground level).
-// Both players load this identical array — no sync needed.
-export const BUILDINGS: BuildingDef[] = [
+// Default map used when no custom map is loaded
+export const DEFAULT_BUILDINGS: BuildingDef[] = [
   { x:  0,  z:  0,  width:  6, depth:  6, height:  5 },
   { x: 12,  z:  5,  width:  5, depth:  8, height:  8 },
   { x: -10, z:  8,  width:  7, depth:  5, height:  3 },
@@ -27,6 +29,9 @@ export const BUILDINGS: BuildingDef[] = [
   { x:  0,  z: 25,  width:  8, depth:  5, height:  6 },
 ]
 
+// Keep the BUILDINGS export for backwards compat (monsters.ts etc.)
+export const BUILDINGS = DEFAULT_BUILDINGS
+
 const BUILDING_COLORS = [
   new Color3(0.62, 0.62, 0.70),
   new Color3(0.50, 0.55, 0.65),
@@ -36,9 +41,11 @@ const BUILDING_COLORS = [
 ]
 
 export class World {
-  readonly buildings: BuildingDef[] = BUILDINGS
+  readonly buildings: BuildingDef[]
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, map?: MapDef) {
+    const buildingList = map?.buildings ?? DEFAULT_BUILDINGS
+    this.buildings = buildingList
     scene.clearColor = new Color4(0.53, 0.81, 0.98, 1.0) // sky blue
 
     // Soft fill light from above
@@ -57,7 +64,7 @@ export class World {
     ground.material = groundMat
 
     // Buildings — mesh center is at height/2 so the base sits on y=0
-    BUILDINGS.forEach((b, i) => {
+    buildingList.forEach((b, i) => {
       const box = MeshBuilder.CreateBox(`building_${i}`, {
         width: b.width,
         depth: b.depth,
@@ -80,5 +87,23 @@ export class World {
       roofMat.diffuseColor = new Color3(0.25, 0.25, 0.30)
       roof.material = roofMat
     })
+
+    // Structures (trees / houses) from map
+    if (map?.structures) {
+      map.structures.forEach((s, i) => {
+        SceneLoader.ImportMeshAsync('', './assets/structures/', `${s.type}.glb`, scene)
+          .then(result => {
+            const root = new TransformNode(`struct_${i}_${s.type}`, scene)
+            result.meshes.forEach(m => { if (!m.parent) m.parent = root })
+            root.position.set(s.x, 0, s.z)
+            root.rotation.y = s.rotation ?? 0
+          })
+          .catch(() => {
+            // Fallback box if GLB is missing
+            const fb = MeshBuilder.CreateBox(`struct_fb_${i}`, { size: 2 }, scene)
+            fb.position.set(s.x, 1, s.z)
+          })
+      })
+    }
   }
 }
