@@ -110,6 +110,8 @@ class Monster {
   private atkCooldown:  number
   private strafeDir          = Math.random() < 0.5 ? 1 : -1
   private strafeSwitchTimer  = 2 + Math.random() * 3
+  private hitFlashTimer      = 0   // seconds remaining of red flash
+  private aggroOverride      = false  // true when damaged from outside natural aggro range
 
   private projectiles:  MonsterProjectile[] = []
   private swings:       SwordSwing[]        = []
@@ -163,6 +165,8 @@ class Monster {
   takeDamage(amount: number): boolean {
     if (!this.alive) return true
     this.hp -= amount
+    this.hitFlashTimer = 0.18   // flash red for 0.18 s
+    this.aggroOverride = true   // always chase after being hit
     if (this.hp <= 0) this.kill()
     return !this.alive
   }
@@ -186,6 +190,16 @@ class Monster {
   ) {
     if (!this.alive) return
 
+    // Red hit flash
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= dt
+      const flash = this.hitFlashTimer > 0
+      this.root?.getChildMeshes(false).forEach(m => {
+        const mat = m.material as StandardMaterial | null
+        if (mat) mat.emissiveColor = flash ? new Color3(1, 0, 0) : Color3.Black()
+      })
+    }
+
     // Tick projectiles
     this.projectiles = this.projectiles.filter(p => {
       if (p.update(dt)) { p.dispose(); return false }
@@ -201,7 +215,7 @@ class Monster {
     const dist      = toPlayer.length()
     const toPlayerN = toPlayer.normalizeToNew()
 
-    if (dist <= this.def.aggroRadius) {
+    if (dist <= this.def.aggroRadius || this.aggroOverride) {
       // Tick strafe direction flip
       this.strafeSwitchTimer -= dt
       if (this.strafeSwitchTimer <= 0) {

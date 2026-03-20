@@ -172,8 +172,65 @@
       z-index: 30;
       opacity: 0.85;
     }
+
+    /* ── Crosshairs ── */
+    .crosshair {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 25;
+    }
+    .crosshair.visible { display: block; }
+
+    /* Archer: thin + with center gap */
+    #crosshairArcher {
+      width: 24px;
+      height: 24px;
+    }
+    #crosshairArcher::before,
+    #crosshairArcher::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.88);
+      border-radius: 1px;
+    }
+    /* horizontal bar — two halves with center gap */
+    #crosshairArcher::before {
+      width: 9px; height: 1.5px;
+      top: 50%; left: 0;
+      transform: translateY(-50%);
+      box-shadow: 15px 0 0 rgba(255, 255, 255, 0.88);
+    }
+    /* vertical bar — two halves with center gap */
+    #crosshairArcher::after {
+      width: 1.5px; height: 9px;
+      left: 50%; top: 0;
+      transform: translateX(-50%);
+      box-shadow: 0 15px 0 rgba(255, 255, 255, 0.88);
+    }
+
+    /* Wizard: circle + center dot */
+    #crosshairWizard {
+      width: 26px;
+      height: 26px;
+      border: 1.5px solid rgba(180, 120, 255, 0.90);
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(160, 80, 255, 0.5);
+    }
+    #crosshairWizard::after {
+      content: '';
+      position: absolute;
+      width: 4px; height: 4px;
+      background: rgba(200, 150, 255, 0.95);
+      border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
   </style>
-  <script type="module" crossorigin src="./assets/index-DZ4LIuKL.js"></script>
+  <script type="module" crossorigin src="./assets/index-z4fInW3Y.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-PeE1O4gN.js">
   <link rel="modulepreload" crossorigin href="./assets/observable-DKD4yN_b.js">
   <link rel="modulepreload" crossorigin href="./assets/engineStore-CtIeXrE5.js">
@@ -422,6 +479,10 @@
 
   <!-- Character class indicator -->
   <div id="charLabel"></div>
+
+  <!-- Crosshairs (shown when pointer is locked to the right class) -->
+  <div id="crosshairArcher" class="crosshair"></div>
+  <div id="crosshairWizard" class="crosshair"></div>
 
   <!-- Controls hint -->
   <div id="hud">

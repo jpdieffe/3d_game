@@ -212,6 +212,7 @@ export class SwordSwing implements Effect {
 class Projectile implements Effect {
   private readonly mesh: Mesh
   private readonly position: Vector3
+  private readonly vel: Vector3   // mutable velocity direction (unit * speed)
   private elapsed = 0
   private disposed = false
 
@@ -224,14 +225,15 @@ class Projectile implements Effect {
   constructor(
     private readonly scene: Scene,
     startPos: Vector3,
-    private readonly dir: Vector3,
+    dir: Vector3,
     private readonly speed: number,
     color: Color3,
     radius: number,
-    isArrow: boolean,
+    private readonly isArrow: boolean,
     private readonly isFirebolt: boolean,
     private readonly maxLife = 3,
   ) {
+    this.vel = dir.clone()
     this.position = startPos.clone()
 
     if (isArrow) {
@@ -254,7 +256,17 @@ class Projectile implements Effect {
   update(dt: number): boolean {
     if (this.disposed) return true
     this.elapsed += dt
-    this.position.addInPlace(this.dir.scale(this.speed * dt))
+
+    // Arrow gravity: pull velocity down over time
+    if (this.isArrow) {
+      this.vel.y -= 9.8 * dt
+      // Re-orient arrow mesh to follow the arc
+      const hLen = Math.sqrt(this.vel.x * this.vel.x + this.vel.z * this.vel.z)
+      this.mesh.rotation.y = Math.atan2(this.vel.x, this.vel.z)
+      this.mesh.rotation.x = -Math.atan2(this.vel.y, hLen) + Math.PI / 2
+    }
+
+    this.position.addInPlace(this.vel.normalize().scale(this.speed * dt))
     this.mesh.position.copyFrom(this.position)
 
     const hitR = this.isFirebolt ? 0.4 : 0.18

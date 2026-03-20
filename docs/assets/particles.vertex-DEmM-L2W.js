@@ -1,1 +1,0 @@
-import"./shaderStore-1xgJNigV.js";import"./logDepthDeclaration-EqpAwMSr.js";import"./clipPlaneVertexDeclaration-CsNTJZqX.js";import"./fogVertexDeclaration-DGA--wzU.js";import"./clipPlaneVertex-BJv0gZs3.js";import"./fogVertex-CahdrvmC.js";import"./logDepthVertex-CBJp2n3K.js";import{_n as e}from"./index-DZ4LIuKL.js";export{e as particlesVertexShaderWGSL};

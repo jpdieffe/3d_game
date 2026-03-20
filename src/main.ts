@@ -83,10 +83,25 @@ function startGame() {
   // Reflect the randomly-chosen starting character in the debug panel
   debug.setCharacter(player.currentClass)
 
+  // ── Crosshair management ─────────────────────────────────────────────────
+  const xhArcher = document.getElementById('crosshairArcher')!
+  const xhWizard = document.getElementById('crosshairWizard')!
+  let crosshairClass = player.currentClass
+
+  function refreshCrosshair() {
+    const locked = document.pointerLockElement === canvas
+    xhArcher.classList.toggle('visible', locked && crosshairClass === 'archer')
+    xhWizard.classList.toggle('visible', locked && crosshairClass === 'wizard')
+  }
+
+  document.addEventListener('pointerlockchange', refreshCrosshair)
+
   // Wire character selection to the player
   debug.onCharacterChange = cls => {
     player.loadCharacter(cls)
     debug.setCharacter(cls)
+    crosshairClass = cls
+    refreshCrosshair()
   }
 
   // Wire camera toggle
